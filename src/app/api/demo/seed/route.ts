@@ -16,36 +16,37 @@ export async function POST() {
   const v1 = await registerVehicle({ callsign: "Green-1", capacity: 14 });
   const v2 = await registerVehicle({ callsign: "Blue-2", capacity: 10 });
 
+  // Approximate Macroharder / Stateline corridor
   await updateVehicleLocation({
     vehicleId: v1.id,
-    lat: 37.3865,
-    lng: -122.0835,
+    lat: 35.0016,
+    lng: -90.0135,
   });
   await updateVehicleLocation({
     vehicleId: v2.id,
-    lat: 37.3835,
-    lng: -122.0805,
+    lat: 35.0021,
+    lng: -90.0118,
   });
 
   await createParty({
-    stopId: "hq-lobby",
-    destinationId: "remote-lot",
+    stopId: "food-trucks-war-room",
+    destinationId: "macroharder-east",
     partySize: 4,
-    note: "team standup",
+    note: "lunch run",
   });
   await createParty({
-    stopId: "hq-lobby",
-    destinationId: "lab-wing",
+    stopId: "crossroads",
+    destinationId: "duke",
     partySize: 2,
   });
   await createParty({
-    stopId: "cafe-row",
-    destinationId: "garage-p3",
+    stopId: "southland-mall",
+    destinationId: "macroharder-west",
     partySize: 3,
   });
   await createParty({
-    stopId: "remote-lot",
-    destinationId: "hq-lobby",
+    stopId: "church-lot",
+    destinationId: "macroharder-east",
     partySize: 6,
   });
 

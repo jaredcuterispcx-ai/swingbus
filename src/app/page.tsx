@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { serviceLabel } from "@/lib/stops";
 import { useAppState } from "@/lib/use-app-state";
 
 export default function HomePage() {
@@ -29,8 +30,8 @@ export default function HomePage() {
             Swing Bus
           </h1>
           <p className="mt-3 max-w-[20rem] text-[0.98rem] leading-relaxed text-ink-soft">
-            Pick your stop, set your destination, see which shuttle is coming
-            next.
+            MEM campus shuttles — pick your stop, set your destination, see
+            which bus is coming next.
           </p>
         </div>
       </section>
@@ -53,7 +54,10 @@ export default function HomePage() {
               className="sb-mode-row"
             >
               <div>
-                <p className="sb-chip mb-0.5">{stop.shortCode}</p>
+                <p className="sb-chip mb-0.5">
+                  {stop.shortCode}
+                  {stop.service ? ` · ${serviceLabel(stop.service)}` : ""}
+                </p>
                 <p className="sb-brand text-xl">{stop.name}</p>
                 <p className="text-sm text-ink-soft">{stop.description}</p>
               </div>

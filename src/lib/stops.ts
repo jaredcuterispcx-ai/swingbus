@@ -1,53 +1,106 @@
-import type { Stop } from "./types";
+import type { Stop, StopService } from "./types";
 
-/** Seed campus stops for the XSI Swing Bus POC. */
+/**
+ * MEM (Memphis / Macroharder) shuttle stops from “MEM Shuttle Info”.
+ *
+ * Lat/lng are approximate placeholders clustered around Stateline Rd /
+ * Southaven–Memphis for ETA math. Replace with pin-accurate coords when
+ * available — ETAs and “next shuttle” ranking depend on them.
+ */
 export const DEFAULT_STOPS: Stop[] = [
   {
-    id: "hq-lobby",
-    name: "HQ Lobby",
-    shortCode: "HQ",
-    lat: 37.3861,
-    lng: -122.0839,
-    description: "Main lobby pickup — front circle",
+    id: "food-trucks-war-room",
+    name: "Food Trucks / War Room",
+    shortCode: "FT",
+    lat: 35.0024,
+    lng: -90.0148,
+    description: "Onsite pickup",
+    service: "onsite",
   },
   {
-    id: "building-b",
-    name: "Building B",
-    shortCode: "B",
-    lat: 37.3872,
-    lng: -122.0815,
-    description: "South entrance near the bike racks",
+    id: "crossroads",
+    name: "Crossroads",
+    shortCode: "XR",
+    lat: 35.0018,
+    lng: -90.0126,
+    description: "Onsite + offsite pickup",
+    service: "both",
   },
   {
-    id: "garage-p3",
-    name: "Garage P3",
-    shortCode: "P3",
-    lat: 37.3848,
-    lng: -122.0852,
-    description: "Level 1 shuttle bay",
+    id: "macroharder-west",
+    name: "Macroharder West",
+    shortCode: "MW",
+    lat: 35.0012,
+    lng: -90.0162,
+    description: "Onsite · 2400 Stateline Rd campus west",
+    service: "onsite",
   },
   {
-    id: "cafe-row",
-    name: "Cafe Row",
-    shortCode: "CR",
-    lat: 37.388,
-    lng: -122.0844,
-    description: "Across from the cafeteria plaza",
+    id: "macroharder-east",
+    name: "Macroharder East",
+    shortCode: "ME",
+    lat: 35.0015,
+    lng: -90.0104,
+    description: "Onsite + offsite · east lot / contractor parking",
+    service: "both",
   },
   {
-    id: "remote-lot",
-    name: "Remote Lot",
-    shortCode: "RL",
-    lat: 37.3829,
-    lng: -122.0798,
-    description: "Overflow parking shuttle stop",
+    id: "church-lot",
+    name: "Church Parking Lot",
+    shortCode: "CH",
+    lat: 35.0048,
+    lng: -90.0082,
+    description: "Offsite · Surge Concierge / Onboarding",
+    service: "offsite",
   },
   {
-    id: "lab-wing",
-    name: "Lab Wing",
-    shortCode: "LW",
-    lat: 37.3891,
-    lng: -122.0821,
-    description: "East lab entrance",
+    id: "southland-mall",
+    name: "Southland Mall Parking Lot",
+    shortCode: "SM",
+    // Approximate public mall pin — refine to the shuttle curb.
+    lat: 35.0475,
+    lng: -90.025,
+    description: "Offsite · Southland Mall, Memphis",
+    service: "offsite",
+  },
+  {
+    id: "duke",
+    name: "Duke",
+    shortCode: "DK",
+    lat: 34.9996,
+    lng: -90.0138,
+    description: "Onsite · Control Room / Beer Garden / Rockstar Camp",
+    service: "onsite",
+  },
+  {
+    id: "gun-range",
+    name: "Gun Range",
+    shortCode: "GR",
+    lat: 34.9988,
+    lng: -90.0112,
+    description: "Onsite pickup",
+    service: "onsite",
+  },
+  {
+    id: "spam-nexus",
+    name: "Spam / Nexus",
+    shortCode: "SN",
+    lat: 35.0006,
+    lng: -90.0155,
+    description: "Onsite · Spam shuttle stop · Stateline Rd",
+    service: "onsite",
   },
 ];
+
+export function serviceLabel(service: StopService | undefined): string {
+  switch (service) {
+    case "onsite":
+      return "Onsite";
+    case "offsite":
+      return "Offsite";
+    case "both":
+      return "Onsite + Offsite";
+    default:
+      return "";
+  }
+}

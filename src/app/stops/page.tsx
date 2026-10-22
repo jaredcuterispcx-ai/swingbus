@@ -4,6 +4,7 @@ import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useState } from "react";
 import { AppHeader } from "@/components/app-header";
+import { serviceLabel } from "@/lib/stops";
 import { useAppState } from "@/lib/use-app-state";
 
 export default function StopsPage() {
@@ -45,6 +46,9 @@ export default function StopsPage() {
                 {stop.shortCode}
               </p>
               <h2 className="sb-brand mt-1 text-2xl">{stop.name}</h2>
+              <p className="mt-1 text-xs font-semibold tracking-wide text-leaf/80 uppercase">
+                {serviceLabel(stop.service)}
+              </p>
               <p className="mt-1 mb-4 text-xs text-ink-soft/70">{stop.description}</p>
               <div className="rounded-2xl bg-white p-3 shadow-sm">
                 {url ? (

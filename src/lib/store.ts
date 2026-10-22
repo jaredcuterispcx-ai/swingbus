@@ -15,7 +15,7 @@ import type {
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "store.json");
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 let writeChain: Promise<void> = Promise.resolve();
 
@@ -34,6 +34,8 @@ function emptyState(): AppState {
 function migrate(raw: Record<string, unknown>): AppState {
   if (raw.schemaVersion === SCHEMA_VERSION && Array.isArray(raw.parties)) {
     const state = raw as unknown as AppState;
+    // Always refresh stop catalog from source of truth (MEM shuttle sheet).
+    state.stops = DEFAULT_STOPS;
     state.vehicles = (state.vehicles ?? []).map((v) => ({
       ...v,
       headingStopId: v.headingStopId ?? null,
@@ -41,11 +43,9 @@ function migrate(raw: Record<string, unknown>): AppState {
     return state;
   }
 
-  // v1 → v2: drivers/requests/suggestions/pickups
+  // v1/v2 → v3: drivers/requests → parties/vehicles + MEM stops
   const base = emptyState();
-  if (Array.isArray(raw.stops) && raw.stops.length) {
-    base.stops = raw.stops as AppState["stops"];
-  }
+  base.stops = DEFAULT_STOPS;
 
   const drivers = (raw.drivers as Array<Record<string, unknown>>) ?? [];
   base.vehicles = drivers.map((d) => ({
@@ -89,6 +89,20 @@ function migrate(raw: Record<string, unknown>): AppState {
   return base;
 }
 
+function pruneOrphanParties(state: AppState): AppState {
+  const ids = new Set(state.stops.map((s) => s.id));
+  const parties = state.parties.filter(
+    (p) => ids.has(p.stopId) && ids.has(p.destinationId),
+  );
+  if (parties.length === state.parties.length) return state;
+  return {
+    ...state,
+    parties,
+    clearances: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 async function ensureStore(): Promise<AppState> {
   await fs.mkdir(DATA_DIR, { recursive: true });
   try {
@@ -96,9 +110,14 @@ async function ensureStore(): Promise<AppState> {
       string,
       unknown
     >;
-    const state = migrate(raw);
-    if (!state.stops?.length) state.stops = DEFAULT_STOPS;
+    const before = JSON.stringify(raw.stops);
+    let state = migrate(raw);
+    state.stops = DEFAULT_STOPS;
     state.schemaVersion = SCHEMA_VERSION;
+    state = pruneOrphanParties(state);
+    if (before !== JSON.stringify(state.stops) || raw.schemaVersion !== SCHEMA_VERSION) {
+      await persist(state);
+    }
     return state;
   } catch {
     const state = emptyState();
@@ -543,8 +562,12 @@ export async function alight(input: {
     const event: BoardingEvent = {
       id: randomUUID(),
       vehicleId: input.vehicleId,
-      stopId: vehicle.currentStopId ?? state.stops[0]?.id ?? "hq-lobby",
-      destinationId: input.destinationId ?? vehicle.currentStopId ?? "hq-lobby",
+      stopId: vehicle.currentStopId ?? state.stops[0]?.id ?? "food-trucks-war-room",
+      destinationId:
+        input.destinationId ??
+        vehicle.currentStopId ??
+        state.stops[0]?.id ??
+        "food-trucks-war-room",
       partyIds: [],
       seats: drop,
       kind: "alight",
