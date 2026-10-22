@@ -1,0 +1,29 @@
+# Local / internal smoke-run for Swing Bus
+# Usage: docker compose up --build
+# App: http://localhost:3000
+
+services:
+  swing-bus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: swing-bus:local
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
