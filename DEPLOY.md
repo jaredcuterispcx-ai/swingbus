@@ -62,7 +62,28 @@ Swing Bus pod/container  ←── image from internal registry
 **Pros:** Matches “hosted from internal network,” durable, observable next to `grafana.svc.int-x.ai`-class services.  
 **Cons:** Needs platform/SRE: namespace, registry auth, ingress, certs, DNS. **This agent cannot do those steps.**
 
-### 2) Cloudflare Tunnel (`cloudflared`) from an internal host (best POC→prod bridge)
+### 2) Tailscale Funnel from an internal / tailnet host (**best ASAP path if xAI already runs Tailscale**)
+
+You already use Tailscale for corp devices. **Funnel** (not Serve) is the feature that exposes a local port to the **public internet** so personal phones do **not** need the Tailscale app:
+
+```bash
+# on an internal host that is on the xAI tailnet, after Swing Bus is listening:
+npm run build && npm start          # or: docker compose up --build
+tailscale funnel 43127              # use 3000 if running the Docker image
+```
+
+Admin prerequisites (one-time, Tailscale admin console): MagicDNS + HTTPS certs + Funnel enabled for the node/tag.
+
+- Phones open `https://<device>.<tailnet>.ts.net` — **no Tailscale client**.
+- Process still runs on a machine inside your network/tailnet.
+- Print QR codes from `/stops` while loaded on that public hostname.
+
+**Pros:** Matches “hosted inside, reachable outside” with almost no new infra; uses tooling you already have.  
+**Cons:** Funnel URLs are tied to a node; bandwidth limits; anyone with the URL can hit the app unless you add SSO later. Prefer a tagged production node, not a laptop.
+
+> Do **not** use `tailscale serve` for passenger phones — Serve is tailnet-only and requires Tailscale on the client.
+
+### 3) Cloudflare Tunnel (`cloudflared`) from an internal host (best POC→prod bridge without Funnel)
 
 - Run the container on an **internal** VM/pod (docker compose or k8s).
 - Run `cloudflared` on that same network path; map a Cloudflare hostname → `http://localhost:3000` (or the Service).
@@ -72,7 +93,7 @@ Swing Bus pod/container  ←── image from internal registry
 **Pros:** Fast, no inbound firewall holes, phones work immediately, still “runs inside.”  
 **Cons:** Needs a Cloudflare account/zone the company owns (or an approved tunnel token from infra). Agent cannot mint corp tunnel credentials.
 
-### 3) Reverse proxy + optional SSO on an existing edge
+### 4) Reverse proxy + optional SSO on an existing edge
 
 - Same container; nginx/Envoy/oauth2-proxy (or corp API gateway) terminates TLS and optionally enforces Okta.
 - Useful if Swing Bus must sit behind the same SSO as other employee web tools.
@@ -80,12 +101,12 @@ Swing Bus pod/container  ←── image from internal registry
 **Pros:** Familiar security model.  
 **Cons:** Still needs an approved public VIP/hostname from networking.
 
-### 4) Public PaaS only (Vercel, etc.) — **not** the lasting home
+### 5) Public PaaS only (Vercel, etc.) — **not** the lasting home
 
 - Fine for a throwaway screenshot demo; **conflicts** with constraint (1) as the long-term home.
-- If used at all, treat as temporary and plan cutover to (1) or (2).
+- If used at all, treat as temporary and plan cutover to (1), (2), or (3).
 
-### 5) Tailscale-only / `*.svc.int-x.ai` only — **rejects phone constraint**
+### 6) Tailscale Serve / `*.svc.int-x.ai` only — **rejects phone constraint**
 
 - Great for laptops on corp VPN/tailnet; **fails** “personal phones not on Tailscale.”
 - Keep internal DNS for operators; do not make it the only URL you print on a QR code.
@@ -94,33 +115,31 @@ Swing Bus pod/container  ←── image from internal registry
 
 ## POC today (ASAP) vs lasting home
 
-### A. POC today — Cursor cloud agent / temporary public tunnel
+### A. POC today — Tailscale Funnel on any internal host (preferred)
 
-Use when you need a URL on phones **this afternoon**.
-
-1. In this workspace:
+1. On a machine already on the xAI tailnet (desk NUC, lab VM, etc.):
    ```bash
-   npm ci
-   npm run build
-   npm run start
-   # or: docker compose up --build
+   git clone <this-repo> && cd swing-bus
+   npm ci && npm run build && npm start
+   # Docker alternative: docker compose up --build   # port 3000
+   tailscale funnel 43127   # or: tailscale funnel 3000
    ```
-2. Expose port 3000 with a **temporary** public tunnel from a machine that can reach the process:
-   - Cloudflare quick tunnel (`cloudflared tunnel --url http://localhost:3000`) → `*.trycloudflare.com`
-   - or another approved ephemeral tunnel
-3. Put that HTTPS URL in a QR code; open on a personal phone (no Tailscale).
+2. Copy the printed `https://…ts.net` URL into Slack; open `/stops` on that host and print QR codes.
+3. Personal phones open the Funnel URL with **no Tailscale app**.
 
-**Limits:** Cursor cloud VMs are ephemeral, egress-restricted, and **not** xAI prod. This path proves UX only. Do not treat the tunnel URL as the employee-facing production host.
+### B. POC today — Cursor cloud agent (click-through only)
 
-### B. Lasting home — xAI internal
+This agent already runs the app at a local port for UI review. Cursor cloud VMs are ephemeral and **cannot** join your corp Tailscale or mint Funnel/ingress. Use path **A** (or Cloudflare quick tunnel) for real phone tests.
+
+### C. Lasting home — xAI internal
 
 1. Hand platform/SRE: this `Dockerfile`, desired hostname, SSO yes/no, expected load.
-2. They: registry push, deploy, public ingress or approved `cloudflared` token, DNS, certs.
+2. They: registry push, deploy, public ingress **or** tagged Tailscale Funnel node **or** approved `cloudflared` token, DNS, certs.
 3. You: point QR codes at the stable public hostname; keep `*.svc.int-x.ai` as the internal-only name if useful for debugging.
 
 **Suggested ask to infra (copy/paste):**
 
-> We need a small Next.js (standalone Docker) app “Swing Bus” running on internal compute (mouseion / int-x.ai cluster preferred), with a **stable HTTPS URL reachable from personal phones without Tailscale**. Prefer corp public ingress or Cloudflare Tunnel to the internal Service. Optional Okta/`auth.x.ai` gate. Image build is in-repo (`Dockerfile`).
+> We need a small Next.js (standalone Docker) app “Swing Bus” running on internal compute (mouseion / int-x.ai cluster preferred), with a **stable HTTPS URL reachable from personal phones without Tailscale**. Prefer corp public ingress, a tagged Tailscale Funnel node, or Cloudflare Tunnel to the internal Service. Optional Okta/`auth.x.ai` gate. Image build is in-repo (`Dockerfile`).
 
 ---
 
@@ -138,7 +157,7 @@ npm run start   # listens on 3000; standalone output used by the image
 
 Image entrypoint: `node server.js` (Next standalone), `HOSTNAME=0.0.0.0`, `PORT=3000`.
 
-**Build blocker (app code, not deploy files):** as of this writing, `npm run build` fails typechecking in `src/lib/dispatch.ts` (`Property 'remaining' does not exist on type 'never'`). The Dockerfile/`output: "standalone"` path is correct once that app-side error is fixed; do not paper over it in the Docker layer.
+Dev script in this repo listens on **43127**; Docker compose publishes **3000**. Point Funnel/tunnels at whichever port you actually started.
 
 ---
 
@@ -175,6 +194,6 @@ Image entrypoint: `node server.js` (Next standalone), `HOSTNAME=0.0.0.0`, `PORT=
 
 | If you need… | Do this |
 | --- | --- |
-| Demo on phones today | `docker compose up --build` + temporary Cloudflare quick tunnel; QR → that URL |
-| Employee-facing lasting URL | Infra: internal deploy + public ingress **or** approved cloudflared; QR → stable hostname |
-| Debug from corp laptop only | Internal Service DNS is enough — but that alone fails the phone requirement |
+| Demo on phones today | Internal host + `tailscale funnel <port>` (or Cloudflare quick tunnel); QR → that URL |
+| Employee-facing lasting URL | Infra: internal deploy + public ingress, tagged Funnel node, **or** approved cloudflared; QR → stable hostname |
+| Debug from corp laptop only | Internal Service DNS / `tailscale serve` is enough — but that alone fails the phone requirement |
