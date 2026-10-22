@@ -1,45 +1,31 @@
-/** Electricity / AI themed shuttle callsigns for XSI Swing Bus. */
-export const ELECTRIC_CALLSIGNS = [
-  "Volt-1",
-  "Volt-2",
-  "Amp-3",
-  "Amp-7",
-  "Spark-4",
-  "Spark-9",
-  "Ion-5",
-  "Ion-8",
-  "Arc-2",
-  "Arc-6",
-  "Pulse-1",
-  "Pulse-3",
-  "Circuit-7",
-  "Circuit-4",
-  "Flux-5",
-  "Flux-2",
-  "Grid-9",
-  "Grid-1",
-  "Tesla-3",
-  "Tesla-6",
-  "Quark-8",
-  "Quark-2",
-  "Photon-4",
-  "Photon-7",
-  "Nova-1",
-  "Nova-5",
-  "Relay-3",
-  "Relay-9",
-  "Coil-2",
-  "Coil-8",
-  "Surge-6",
-  "Surge-1",
-  "Phase-4",
-  "Phase-7",
-  "Current-5",
-  "Current-3",
-  "Beacon-AI",
-  "Node-AI",
-  "Vector-X",
-  "Signal-X",
+/** Electricity / AI themed base callsigns (no numbers — enumerate only when taken). */
+export const ELECTRIC_BASES = [
+  "Volt",
+  "Amp",
+  "Spark",
+  "Ion",
+  "Arc",
+  "Pulse",
+  "Circuit",
+  "Flux",
+  "Grid",
+  "Tesla",
+  "Quark",
+  "Photon",
+  "Nova",
+  "Relay",
+  "Coil",
+  "Surge",
+  "Phase",
+  "Current",
+  "Beacon",
+  "Node",
+  "Vector",
+  "Signal",
+  "Watt",
+  "Ohm",
+  "Plasma",
+  "Electron",
 ] as const;
 
 export function normalizeCallsign(value: string): string {
@@ -59,20 +45,28 @@ export function takenCallsigns(
   return set;
 }
 
-/** Pick a random electricity-themed callsign not already in use. */
+/** Use bare name; only append -2, -3, … if that callsign is already on duty. */
+export function allocateCallsign(
+  base: string,
+  vehicles: { callsign: string; active?: boolean }[] = [],
+): string {
+  const root = normalizeCallsign(base).replace(/-\d+$/, "") || "Volt";
+  const taken = takenCallsigns(vehicles);
+  if (!taken.has(root.toLowerCase())) return root;
+  let n = 2;
+  while (taken.has(`${root}-${n}`.toLowerCase()) && n < 999) n += 1;
+  return `${root}-${n}`;
+}
+
+/** Random electrical base; enumerates only when that name is taken. */
 export function randomElectricCallsign(
   vehicles: { callsign: string; active?: boolean }[] = [],
 ): string {
   const taken = takenCallsigns(vehicles);
-  const free = ELECTRIC_CALLSIGNS.filter(
-    (c) => !taken.has(c.toLowerCase()),
-  );
-  const pool = free.length > 0 ? free : [...ELECTRIC_CALLSIGNS];
-  const pick = pool[Math.floor(Math.random() * pool.length)];
-  if (free.length > 0) return pick;
-
-  // All themed names taken — append a short suffix.
-  let n = 1;
-  while (taken.has(`${pick}-${n}`.toLowerCase()) && n < 999) n += 1;
-  return `${pick}-${n}`;
+  const free = ELECTRIC_BASES.filter((b) => !taken.has(b.toLowerCase()));
+  const base =
+    free.length > 0
+      ? free[Math.floor(Math.random() * free.length)]
+      : ELECTRIC_BASES[Math.floor(Math.random() * ELECTRIC_BASES.length)];
+  return allocateCallsign(base, vehicles);
 }

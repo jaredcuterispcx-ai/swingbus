@@ -247,13 +247,26 @@ export default function DriverPage() {
             <span className="text-xs font-semibold tracking-wide uppercase opacity-70">
               Callsign
             </span>
-            <input
-              className="sb-input"
-              required
-              placeholder="e.g. Shuttle 3 / Green"
-              value={callsign}
-              onChange={(e) => setCallsign(e.target.value)}
-            />
+            <div className="flex gap-2">
+              <input
+                className="sb-input font-mono"
+                required
+                placeholder="Volt"
+                value={callsign}
+                onChange={(e) => setCallsign(e.target.value)}
+              />
+              <button
+                type="button"
+                className="sb-btn sb-btn-ghost shrink-0 px-4"
+                onClick={reshuffleCallsign}
+                title="Roll another callsign"
+              >
+                ↻
+              </button>
+            </div>
+            <p className="text-xs text-ink-soft">
+              Random electrical name — must be unique while on duty.
+            </p>
           </label>
           <label className="block space-y-1.5">
             <span className="text-xs font-semibold tracking-wide uppercase opacity-70">
