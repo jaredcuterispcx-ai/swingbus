@@ -57,6 +57,8 @@ export interface Vehicle {
   lng: number | null;
   lastLocationAt: string | null;
   currentStopId: StopId | null;
+  /** Where the driver is heading / routing toward */
+  headingStopId: StopId | null;
   active: boolean;
   createdAt: string;
 }

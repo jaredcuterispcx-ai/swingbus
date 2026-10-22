@@ -5,6 +5,7 @@ import {
   getState,
   registerVehicle,
   setVehicleActive,
+  setVehicleHeading,
   updateVehicleLocation,
 } from "@/lib/store";
 
@@ -67,6 +68,18 @@ export async function PATCH(req: Request) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
       }
       return NextResponse.json(clearance);
+    }
+
+    if (body.action === "heading") {
+      const vehicle = await setVehicleHeading({
+        vehicleId,
+        headingStopId: body.headingStopId ? String(body.headingStopId) : null,
+      });
+      if (!vehicle) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      const state = await getState();
+      return NextResponse.json({ ...vehicle, seats: seatLedger(state, vehicle) });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });

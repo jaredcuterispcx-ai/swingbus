@@ -1,6 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { useAppState } from "@/lib/use-app-state";
 
 export default function HomePage() {
+  const { state, loading } = useAppState(8000);
+
   return (
     <main className="sb-shell">
       <section className="sb-hero sb-rise mb-5">
@@ -24,62 +29,49 @@ export default function HomePage() {
             Swing Bus
           </h1>
           <p className="mt-3 max-w-[20rem] text-[0.98rem] leading-relaxed text-ink-soft">
-            Request a seat. Track the shuttle. Dispatch like a live network —
-            electrical precision, zero radio desk.
+            Pick your stop, set your destination, see which shuttle is coming
+            next.
           </p>
-
-          <div className="mt-6 flex flex-wrap gap-2">
-            <Link href="/passenger" className="sb-btn sb-btn-accent">
-              Ride
-            </Link>
-            <Link href="/driver" className="sb-btn sb-btn-primary">
-              Drive
-            </Link>
-          </div>
         </div>
       </section>
 
-      <nav className="grid gap-2.5">
-        <Link href="/passenger" className="sb-mode-row sb-rise sb-rise-delay-1">
-          <div>
-            <p className="sb-chip mb-1">01</p>
-            <h2 className="sb-brand text-xl">Passenger</h2>
-            <p className="mt-0.5 text-sm text-ink-soft">
-              Scan a stand · set seats · destination
-            </p>
-          </div>
-          <span className="text-leaf">→</span>
-        </Link>
+      <section className="sb-rise sb-rise-delay-1 mb-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="sb-brand text-lg">Where are you?</h2>
+          <Link href="/stops" className="font-mono text-[11px] text-leaf uppercase">
+            Scan QR
+          </Link>
+        </div>
+        {loading && (
+          <p className="text-sm text-ink-soft">Loading stops…</p>
+        )}
+        <div className="grid gap-2">
+          {(state?.stops ?? []).map((stop) => (
+            <Link
+              key={stop.id}
+              href={`/passenger/${stop.id}`}
+              className="sb-mode-row"
+            >
+              <div>
+                <p className="sb-chip mb-0.5">{stop.shortCode}</p>
+                <p className="sb-brand text-xl">{stop.name}</p>
+                <p className="text-sm text-ink-soft">{stop.description}</p>
+              </div>
+              <span className="text-leaf">→</span>
+            </Link>
+          ))}
+        </div>
+      </section>
 
-        <Link href="/driver" className="sb-mode-row sb-rise sb-rise-delay-2">
-          <div>
-            <p className="sb-chip mb-1">02</p>
-            <h2 className="sb-brand text-xl">Driver</h2>
-            <p className="mt-0.5 text-sm text-ink-soft">
-              Callsign · GPS · board against seat tape
-            </p>
-          </div>
-          <span className="text-leaf">→</span>
-        </Link>
+      <Link
+        href="/driver"
+        className="sb-btn sb-btn-ghost sb-rise sb-rise-delay-2 w-full"
+      >
+        I&apos;m driving
+      </Link>
 
-        <Link href="/dispatch" className="sb-mode-row sb-rise sb-rise-delay-3">
-          <div>
-            <p className="sb-chip mb-1">03</p>
-            <h2 className="sb-brand text-xl">Ground control</h2>
-            <p className="mt-0.5 text-sm text-ink-soft">
-              Fleet capacity · clearances · live board
-            </p>
-          </div>
-          <span className="text-leaf">→</span>
-        </Link>
-      </nav>
-
-      <p className="sb-rise sb-rise-delay-3 mt-7 text-center font-mono text-[11px] tracking-wide text-ink-soft/70 uppercase">
-        <Link href="/stops" className="text-leaf">
-          Stand QR
-        </Link>
-        <span className="mx-2 opacity-40">·</span>
-        <Link href="/deploy">Deploy</Link>
+      <p className="mt-5 text-center font-mono text-[11px] tracking-wide text-ink-soft/60 uppercase">
+        <Link href="/dispatch">Ground control</Link>
       </p>
     </main>
   );

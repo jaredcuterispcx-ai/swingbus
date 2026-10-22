@@ -2,19 +2,27 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/app-header";
+import { nextShuttleForStop, shuttlesForStop } from "@/lib/fleet";
 import { stopName, useAppState } from "@/lib/use-app-state";
+
+const PARTY_KEY = "swingbus.partyId";
 
 export default function PassengerStopPage() {
   const params = useParams<{ stopId: string }>();
   const stopId = params.stopId;
-  const { state, loading, error, refresh } = useAppState(4000);
+  const { state, loading, error, refresh } = useAppState(2500);
   const [destinationId, setDestinationId] = useState("");
   const [partySize, setPartySize] = useState(1);
+  const [partyId, setPartyId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(PARTY_KEY);
+    if (saved) setPartyId(saved);
+  }, []);
 
   const stop = state?.stops.find((s) => s.id === stopId);
   const destinations = useMemo(
@@ -22,34 +30,29 @@ export default function PassengerStopPage() {
     [state, stopId],
   );
 
-  const demand = useMemo(() => {
-    if (!state) return { seats: 0, parties: 0 };
-    const list = state.parties.filter(
-      (p) =>
-        p.stopId === stopId &&
-        (p.status === "waiting" ||
-          p.status === "cleared" ||
-          p.status === "boarding"),
-    );
-    return {
-      seats: list.reduce((n, p) => n + p.partySize, 0),
-      parties: list.length,
-    };
-  }, [state, stopId]);
+  const myParty = state?.parties.find(
+    (p) =>
+      p.id === partyId &&
+      (p.status === "waiting" ||
+        p.status === "cleared" ||
+        p.status === "boarding"),
+  );
 
-  const clearance = state?.clearances.find(
-    (c) =>
-      c.stopId === stopId &&
-      (c.status === "issued" ||
-        c.status === "accepted" ||
-        c.status === "boarding"),
+  const waiting = Boolean(myParty && myParty.stopId === stopId);
+
+  const fleet = useMemo(
+    () => (state && stopId ? shuttlesForStop(state, stopId) : []),
+    [state, stopId],
+  );
+  const next = useMemo(
+    () => (state && stopId ? nextShuttleForStop(state, stopId) : null),
+    [state, stopId],
   );
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setFormError(null);
-    setMessage(null);
     try {
       const res = await fetch("/api/parties", {
         method: "POST",
@@ -58,27 +61,9 @@ export default function PassengerStopPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Request failed");
+      localStorage.setItem(PARTY_KEY, data.id);
+      setPartyId(data.id);
       await refresh();
-      const after = await fetch("/api/state", { cache: "no-store" }).then((r) =>
-        r.json(),
-      );
-      const mine = after.parties?.find((p: { id: string }) => p.id === data.id);
-      const clr = after.clearances?.find(
-        (c: { id: string }) => c.id === mine?.clearanceId,
-      );
-      if (mine?.status === "cleared" && clr) {
-        setMessage(
-          `Seats held on ${clr.vehicleCallsign} — party of ${partySize} to ${stopName(state, destinationId)}. ETA ~${clr.etaMinutes} min.`,
-        );
-      } else if (mine?.status === "cleared") {
-        setMessage(
-          `Seats held — party of ${partySize} to ${stopName(state, destinationId)}. Watch for your shuttle.`,
-        );
-      } else {
-        setMessage(
-          `Queued — party of ${partySize} to ${stopName(state, destinationId)}. Ground control will hold seats when a bus has room.`,
-        );
-      }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Failed");
     } finally {
@@ -86,11 +71,23 @@ export default function PassengerStopPage() {
     }
   }
 
+  async function cancelWait() {
+    if (!partyId) return;
+    await fetch("/api/parties", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "cancel", id: partyId }),
+    });
+    localStorage.removeItem(PARTY_KEY);
+    setPartyId(null);
+    await refresh();
+  }
+
   return (
     <main className="sb-shell">
-      <AppHeader backHref="/passenger" backLabel="Passenger" badge="Stand" />
+      <AppHeader backHref="/" backLabel="Home" badge="Ride" />
 
-      {loading && <p className="text-sm text-ink-soft/70">Loading stand…</p>}
+      {loading && <p className="text-sm text-ink-soft">Loading…</p>}
       {error && (
         <p className="mb-4 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">
           {error}
@@ -99,52 +96,22 @@ export default function PassengerStopPage() {
 
       {!loading && !stop && (
         <div className="sb-panel">
-          <h1 className="sb-brand text-3xl">Unknown stand</h1>
-          <p className="mt-2 text-sm text-ink-soft/85">
-            This QR doesn&apos;t match a Swing Bus stand.
-          </p>
-          <Link href="/passenger" className="sb-btn sb-btn-primary mt-4 inline-flex">
-            Choose stand
+          <h1 className="sb-brand text-3xl">Unknown stop</h1>
+          <Link href="/" className="sb-btn sb-btn-primary mt-4 inline-flex">
+            Pick a stop
           </Link>
         </div>
       )}
 
-      {stop && (
+      {stop && !waiting && (
         <>
           <header className="sb-rise mb-5">
-            <p className="text-sm font-medium tracking-[0.16em] text-leaf uppercase">
-              Stand {stop.shortCode}
-            </p>
-            <h1 className="sb-brand mt-1 text-4xl">{stop.name}</h1>
-            <p className="mt-2 text-sm text-ink-soft/85">{stop.description}</p>
+            <p className="sb-chip">Pickup · {stop.shortCode}</p>
+            <h1 className="sb-brand mt-1 text-4xl tracking-tight">{stop.name}</h1>
+            <p className="mt-2 text-sm text-ink-soft">{stop.description}</p>
           </header>
 
-          <div className="sb-panel sb-rise sb-rise-delay-1 mb-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold tracking-wide uppercase opacity-70">
-                Seat demand
-              </p>
-              <p className="sb-brand text-3xl">
-                {demand.seats}
-                <span className="ml-2 text-base font-sans font-medium text-ink-soft/70">
-                  seats · {demand.parties} parties
-                </span>
-              </p>
-            </div>
-            {clearance ? (
-              <div className="max-w-[45%] text-right text-xs leading-snug text-leaf">
-                {clearance.vehicleCallsign} holding {clearance.seatsReserved} · ~
-                {clearance.etaMinutes} min
-              </div>
-            ) : (
-              <div className="text-xs text-ink-soft/60">Awaiting clearance</div>
-            )}
-          </div>
-
-          <form
-            onSubmit={submit}
-            className="sb-panel sb-rise sb-rise-delay-2 space-y-4"
-          >
+          <form onSubmit={submit} className="sb-panel sb-rise space-y-4">
             <label className="block space-y-1.5">
               <span className="text-xs font-semibold tracking-wide uppercase opacity-70">
                 Destination
@@ -166,7 +133,7 @@ export default function PassengerStopPage() {
 
             <label className="block space-y-1.5">
               <span className="text-xs font-semibold tracking-wide uppercase opacity-70">
-                How many seats?
+                Passengers
               </span>
               <div className="flex items-center gap-3">
                 <button
@@ -188,21 +155,97 @@ export default function PassengerStopPage() {
             </label>
 
             {formError && <p className="text-sm text-danger">{formError}</p>}
-            {message && (
-              <p className="rounded-xl bg-leaf/10 px-3 py-2 text-sm text-leaf">
-                {message}
-              </p>
-            )}
 
             <button
               type="submit"
               className="sb-btn sb-btn-accent w-full"
               disabled={submitting || !destinationId}
             >
-              {submitting ? "Queuing…" : "Request seats"}
+              {submitting ? "Requesting…" : "Request ride"}
             </button>
           </form>
         </>
+      )}
+
+      {stop && waiting && myParty && (
+        <div className="space-y-3">
+          <section className="sb-panel sb-rise">
+            <p className="sb-chip">Waiting at {stop.shortCode}</p>
+            <h1 className="sb-brand mt-1 text-3xl tracking-tight">
+              {myParty.partySize} → {stopName(state, myParty.destinationId)}
+            </h1>
+            <p className="mt-2 text-sm text-ink-soft">
+              {myParty.status === "cleared"
+                ? "A shuttle has been cleared to you."
+                : "You’re in the queue."}
+            </p>
+            {next && (
+              <div className="mt-4 rounded-xl border border-leaf/35 bg-leaf/10 px-3 py-3">
+                <p className="text-xs font-semibold tracking-wide text-leaf uppercase">
+                  Next to you
+                </p>
+                <p className="sb-brand text-2xl">{next.vehicle.callsign}</p>
+                <p className="text-sm text-ink-soft">
+                  {next.etaMinutes != null
+                    ? `~${next.etaMinutes} min`
+                    : "ETA pending"}
+                  {" · "}
+                  {next.seatsFree} seats free
+                  {" · "}
+                  {next.reason}
+                </p>
+              </div>
+            )}
+            <button
+              type="button"
+              className="sb-btn sb-btn-ghost mt-3 w-full text-sm"
+              onClick={() => void cancelWait()}
+            >
+              Cancel request
+            </button>
+          </section>
+
+          <section className="sb-panel sb-rise sb-rise-delay-1">
+            <h2 className="sb-brand text-xl">All shuttles</h2>
+            <p className="mt-1 text-sm text-ink-soft">
+              Live fleet — which is coming to {stop.name}
+            </p>
+            {fleet.length === 0 ? (
+              <p className="mt-3 text-sm text-ink-soft">
+                No shuttles online yet. Stay here — the board updates live.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {fleet.map((row, i) => (
+                  <li
+                    key={row.vehicle.id}
+                    className={`rounded-xl border px-3 py-2.5 ${
+                      row.comingHere || i === 0
+                        ? "border-leaf/40 bg-leaf/10"
+                        : "border-[var(--line)]"
+                    }`}
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="sb-brand text-lg">{row.vehicle.callsign}</p>
+                      <p className="font-mono text-sm text-leaf">
+                        {row.etaMinutes != null
+                          ? `~${row.etaMinutes} min`
+                          : "—"}
+                      </p>
+                    </div>
+                    <p className="text-xs text-ink-soft">
+                      {row.seatsFree} free
+                      {row.headingName ? ` · → ${row.headingName}` : ""}
+                      {" · "}
+                      {row.reason}
+                      {i === 0 ? " · next" : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
       )}
     </main>
   );

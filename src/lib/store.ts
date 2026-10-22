@@ -33,7 +33,12 @@ function emptyState(): AppState {
 
 function migrate(raw: Record<string, unknown>): AppState {
   if (raw.schemaVersion === SCHEMA_VERSION && Array.isArray(raw.parties)) {
-    return raw as unknown as AppState;
+    const state = raw as unknown as AppState;
+    state.vehicles = (state.vehicles ?? []).map((v) => ({
+      ...v,
+      headingStopId: v.headingStopId ?? null,
+    }));
+    return state;
   }
 
   // v1 → v2: drivers/requests/suggestions/pickups
@@ -53,6 +58,7 @@ function migrate(raw: Record<string, unknown>): AppState {
     lng: (d.lng as number | null) ?? null,
     lastLocationAt: (d.lastLocationAt as string | null) ?? null,
     currentStopId: (d.currentStopId as string | null) ?? null,
+    headingStopId: (d.headingStopId as string | null) ?? null,
     active: d.active !== false,
     createdAt: String(d.createdAt ?? new Date().toISOString()),
   }));
@@ -217,6 +223,7 @@ export async function registerVehicle(input: {
       lng: null,
       lastLocationAt: null,
       currentStopId: null,
+      headingStopId: null,
       active: true,
       createdAt: now,
     };
@@ -258,6 +265,37 @@ export async function updateVehicleLocation(input: {
     next = refreshGroundControl(next);
     await persist(next);
     return next.vehicles.find((v) => v.id === input.vehicleId) ?? null;
+  });
+}
+
+export async function setVehicleHeading(input: {
+  vehicleId: string;
+  headingStopId: string | null;
+}): Promise<Vehicle | null> {
+  return withWrite(async (state) => {
+    const idx = state.vehicles.findIndex((v) => v.id === input.vehicleId);
+    if (idx < 0) return null;
+    if (
+      input.headingStopId &&
+      !state.stops.some((s) => s.id === input.headingStopId)
+    ) {
+      throw new Error("Unknown destination");
+    }
+    const now = new Date().toISOString();
+    const updated: Vehicle = {
+      ...state.vehicles[idx],
+      headingStopId: input.headingStopId,
+      status:
+        input.headingStopId && state.vehicles[idx].active
+          ? "enroute"
+          : state.vehicles[idx].status,
+    };
+    const vehicles = [...state.vehicles];
+    vehicles[idx] = updated;
+    let next: AppState = { ...state, vehicles, updatedAt: now };
+    next = refreshGroundControl(next);
+    await persist(next);
+    return next.vehicles[idx];
   });
 }
 
