@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AppHeader } from "@/components/app-header";
 import type { VehicleWithSeats } from "@/lib/use-app-state";
 import { stopName, useAppState } from "@/lib/use-app-state";
 
@@ -208,21 +208,13 @@ export default function DriverPage() {
 
   return (
     <main className="sb-shell">
-      <div className="mb-6 flex items-center justify-between">
-        <Link href="/" className="text-sm text-ink-soft/80">
-          ← Swing Bus
-        </Link>
-        <span className="inline-flex items-center gap-2 text-xs font-medium tracking-wide text-amber uppercase">
-          <span className="sb-live-dot" style={{ background: "var(--amber-soft)" }} />{" "}
-          Vehicle
-        </span>
-      </div>
+      <AppHeader badge="Driver" />
 
       <header className="sb-rise mb-5">
-        <h1 className="sb-brand text-4xl">Driver / vehicle</h1>
-        <p className="mt-2 text-ink-soft/85">
-          Your callsign publishes seat capacity. Ground control holds seats when
-          it clears you to a stand — board to convert holds into occupied.
+        <h1 className="sb-brand text-4xl tracking-tight">Go online</h1>
+        <p className="mt-2 text-ink-soft">
+          Publish callsign and capacity. Clearances hold seats; boarding converts
+          holds into occupied — live seat tape, always.
         </p>
       </header>
 

@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo } from "react";
+import { AppHeader } from "@/components/app-header";
 import { stopName, useAppState, type VehicleWithSeats } from "@/lib/use-app-state";
 
 export default function GroundControlPage() {
@@ -57,22 +57,14 @@ export default function GroundControlPage() {
 
   return (
     <main className="sb-shell !max-w-[860px]">
-      <div className="mb-6 flex items-center justify-between">
-        <Link href="/" className="text-sm text-ink-soft/80">
-          ← Swing Bus
-        </Link>
-        <span className="inline-flex items-center gap-2 text-xs font-medium tracking-wide text-leaf uppercase">
-          <span className="sb-live-dot" /> Ground control
-        </span>
-      </div>
+      <AppHeader badge="Control" />
 
       <header className="sb-rise mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="sb-brand text-4xl">Ground control</h1>
-          <p className="mt-2 max-w-lg text-ink-soft/85">
-            Airport-style board: stands (stops) show seat demand; vehicles show
-            free / held / onboard. Clearances auto-issue to the nearest shuttle
-            with enough available seats.
+          <h1 className="sb-brand text-4xl tracking-tight">Live network</h1>
+          <p className="mt-2 max-w-lg text-ink-soft">
+            Fleet seat tape · stand demand · auto clearances. Nearest vehicle
+            with free seats gets the hold.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

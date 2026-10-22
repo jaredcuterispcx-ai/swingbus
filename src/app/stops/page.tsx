@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useState } from "react";
+import { AppHeader } from "@/components/app-header";
 import { useAppState } from "@/lib/use-app-state";
 
 export default function StopsPage() {
@@ -15,21 +16,13 @@ export default function StopsPage() {
 
   return (
     <main className="sb-shell !max-w-[900px]">
-      <div className="mb-6 flex items-center justify-between">
-        <Link href="/" className="text-sm text-ink-soft/80">
-          ← Swing Bus
-        </Link>
-        <span className="text-xs font-medium tracking-wide text-leaf uppercase">
-          Print & post
-        </span>
-      </div>
+      <AppHeader badge="QR sheet" />
 
       <header className="sb-rise mb-6">
-        <h1 className="sb-brand text-4xl">Stand QR codes</h1>
-        <p className="mt-2 max-w-xl text-ink-soft/85">
-          Tape one at each curb. Passengers scan on personal phones and request
-          seats — no app install. Generate these on the Funnel / public hostname
-          so codes work off Tailscale.
+        <h1 className="sb-brand text-4xl tracking-tight">Stand codes</h1>
+        <p className="mt-2 max-w-xl text-ink-soft">
+          Print and tape at each curb. Generate on the public Funnel hostname so
+          phones work off Tailscale.
         </p>
       </header>
 
@@ -55,7 +48,7 @@ export default function StopsPage() {
               <p className="mt-1 mb-4 text-xs text-ink-soft/70">{stop.description}</p>
               <div className="rounded-2xl bg-white p-3 shadow-sm">
                 {url ? (
-                  <QRCodeSVG value={url} size={148} bgColor="#ffffff" fgColor="#0c1f1a" />
+                  <QRCodeSVG value={url} size={148} bgColor="#121217" fgColor="#00e5ff" />
                 ) : (
                   <div className="h-[148px] w-[148px] animate-pulse rounded bg-mist/40" />
                 )}

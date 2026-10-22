@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { AppHeader } from "@/components/app-header";
 import { stopName, useAppState } from "@/lib/use-app-state";
 
 export default function PassengerHomePage() {
@@ -62,20 +63,13 @@ export default function PassengerHomePage() {
 
   return (
     <main className="sb-shell">
-      <div className="mb-6 flex items-center justify-between">
-        <Link href="/" className="text-sm text-ink-soft/80">
-          ← Swing Bus
-        </Link>
-        <span className="inline-flex items-center gap-2 text-xs font-medium tracking-wide text-leaf uppercase">
-          <span className="sb-live-dot" /> Passenger
-        </span>
-      </div>
+      <AppHeader badge="Passenger" />
 
       <header className="sb-rise mb-6">
-        <h1 className="sb-brand text-4xl">Need a seat?</h1>
-        <p className="mt-2 text-ink-soft/85">
-          Prefer the QR at your stand. Tell us party size and destination — we
-          hold seats on the next efficient shuttle.
+        <h1 className="sb-brand text-4xl tracking-tight">Where to?</h1>
+        <p className="mt-2 text-ink-soft">
+          Scan a stand QR or pick below. Seats get held on the next shuttle —
+          Uber-simple, XSI-smart.
         </p>
       </header>
 

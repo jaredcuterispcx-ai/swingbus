@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
+import { AppHeader } from "@/components/app-header";
 import { stopName, useAppState } from "@/lib/use-app-state";
 
 export default function PassengerStopPage() {
@@ -87,14 +88,7 @@ export default function PassengerStopPage() {
 
   return (
     <main className="sb-shell">
-      <div className="mb-6 flex items-center justify-between">
-        <Link href="/passenger" className="text-sm text-ink-soft/80">
-          ← Passenger
-        </Link>
-        <span className="text-xs font-medium tracking-wide text-leaf uppercase">
-          Stand check-in
-        </span>
-      </div>
+      <AppHeader backHref="/passenger" backLabel="Passenger" badge="Stand" />
 
       {loading && <p className="text-sm text-ink-soft/70">Loading stand…</p>}
       {error && (

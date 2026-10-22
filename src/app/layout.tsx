@@ -1,34 +1,38 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Sora } from "next/font/google";
+import { JetBrains_Mono, Outfit } from "next/font/google";
 import "./globals.css";
 
-const sora = Sora({
-  variable: "--font-sora",
+const outfit = Outfit({
+  variable: "--font-outfit",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
+const mono = JetBrains_Mono({
+  variable: "--font-mono",
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
   title: "Swing Bus · XSI",
   description:
-    "Airport-style ground control for XSI shuttles — seat demand, vehicle seat tape, automatic clearances.",
+    "XSI shuttle ground control — request a seat, drive a vehicle, dispatch like Uber for campus.",
   applicationName: "Swing Bus",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     title: "Swing Bus",
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: "/xsi-mark.svg",
+    apple: "/xsi-mark.svg",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1f7a5c",
+  themeColor: "#050507",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -41,7 +45,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${sora.variable} ${fraunces.variable} antialiased`}>
+      <body className={`${outfit.variable} ${mono.variable} antialiased`}>
         {children}
       </body>
     </html>

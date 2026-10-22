@@ -3,78 +3,83 @@ import Link from "next/link";
 export default function HomePage() {
   return (
     <main className="sb-shell">
-      <header className="sb-rise mb-8 pt-6">
-        <p className="mb-2 text-sm font-medium tracking-[0.18em] text-leaf uppercase">
-          XSI ground transport
-        </p>
-        <h1 className="sb-brand text-5xl leading-[0.95] text-ink sm:text-6xl">
-          Swing Bus
-        </h1>
-        <p className="mt-4 max-w-md text-[1.05rem] leading-relaxed text-ink-soft/90">
-          Airport-style ground control for campus shuttles — seat demand at every
-          stand, live vehicle seat tape, automatic clearances. No radio desk.
-        </p>
-      </header>
-
-      <div className="grid gap-3">
-        <Link
-          href="/passenger"
-          className="sb-panel sb-rise sb-rise-delay-1 block transition hover:-translate-y-0.5"
-        >
-          <div className="flex items-start justify-between gap-3">
+      <section className="sb-hero sb-rise mb-5">
+        <div className="relative z-[1]">
+          <div className="mb-8 flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/xsi-mark.svg"
+              alt="XSI"
+              width={48}
+              height={48}
+              className="rounded-[14px]"
+            />
             <div>
-              <h2 className="sb-brand text-2xl">Passenger</h2>
-              <p className="mt-1 text-sm leading-relaxed text-ink-soft/85">
-                Scan a stand QR, request seats by party size and destination.
-              </p>
+              <p className="sb-chip">XSI · mobility</p>
+              <p className="sb-brand text-2xl leading-none tracking-tight">XSI</p>
             </div>
-            <span className="mt-1 text-leaf">→</span>
           </div>
+
+          <h1 className="sb-brand text-[2.75rem] leading-[0.95] tracking-tight sm:text-5xl">
+            Swing Bus
+          </h1>
+          <p className="mt-3 max-w-[20rem] text-[0.98rem] leading-relaxed text-ink-soft">
+            Request a seat. Track the shuttle. Dispatch like a live network —
+            electrical precision, zero radio desk.
+          </p>
+
+          <div className="mt-6 flex flex-wrap gap-2">
+            <Link href="/passenger" className="sb-btn sb-btn-accent">
+              Ride
+            </Link>
+            <Link href="/driver" className="sb-btn sb-btn-primary">
+              Drive
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <nav className="grid gap-2.5">
+        <Link href="/passenger" className="sb-mode-row sb-rise sb-rise-delay-1">
+          <div>
+            <p className="sb-chip mb-1">01</p>
+            <h2 className="sb-brand text-xl">Passenger</h2>
+            <p className="mt-0.5 text-sm text-ink-soft">
+              Scan a stand · set seats · destination
+            </p>
+          </div>
+          <span className="text-leaf">→</span>
         </Link>
 
-        <Link
-          href="/driver"
-          className="sb-panel sb-rise sb-rise-delay-2 block transition hover:-translate-y-0.5"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="sb-brand text-2xl">Driver / vehicle</h2>
-              <p className="mt-1 text-sm leading-relaxed text-ink-soft/85">
-                Publish callsign + capacity, share GPS, accept clearances, board
-                and alight against the seat ledger.
-              </p>
-            </div>
-            <span className="mt-1 text-leaf">→</span>
+        <Link href="/driver" className="sb-mode-row sb-rise sb-rise-delay-2">
+          <div>
+            <p className="sb-chip mb-1">02</p>
+            <h2 className="sb-brand text-xl">Driver</h2>
+            <p className="mt-0.5 text-sm text-ink-soft">
+              Callsign · GPS · board against seat tape
+            </p>
           </div>
+          <span className="text-leaf">→</span>
         </Link>
 
-        <Link
-          href="/dispatch"
-          className="sb-panel sb-rise sb-rise-delay-3 block transition hover:-translate-y-0.5"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="sb-brand text-2xl">Ground control</h2>
-              <p className="mt-1 text-sm leading-relaxed text-ink-soft/85">
-                Fleet seat tape, stand demand, and issued clearances — like a
-                tower for buses.
-              </p>
-            </div>
-            <span className="mt-1 text-leaf">→</span>
+        <Link href="/dispatch" className="sb-mode-row sb-rise sb-rise-delay-3">
+          <div>
+            <p className="sb-chip mb-1">03</p>
+            <h2 className="sb-brand text-xl">Ground control</h2>
+            <p className="mt-0.5 text-sm text-ink-soft">
+              Fleet capacity · clearances · live board
+            </p>
           </div>
+          <span className="text-leaf">→</span>
         </Link>
-      </div>
+      </nav>
 
-      <p className="sb-rise sb-rise-delay-3 mt-8 text-center text-sm text-ink-soft/70">
-        Printable stand QRs on{" "}
-        <Link href="/stops" className="underline decoration-leaf/50 underline-offset-2">
-          /stops
+      <p className="sb-rise sb-rise-delay-3 mt-7 text-center font-mono text-[11px] tracking-wide text-ink-soft/70 uppercase">
+        <Link href="/stops" className="text-leaf">
+          Stand QR
         </Link>
-        . Phone access without Tailscale:{" "}
-        <Link href="/deploy" className="underline decoration-leaf/50 underline-offset-2">
-          Funnel deploy
-        </Link>
-        .
+        <span className="mx-2 opacity-40">·</span>
+        <Link href="/deploy">Deploy</Link>
       </p>
     </main>
   );
