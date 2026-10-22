@@ -1,33 +1,53 @@
 import { NextResponse } from "next/server";
+import { activeClearances, seatLedger } from "@/lib/seats";
 import { getState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-/** Live dispatch snapshot — same as /api/state but focused for polling UIs. */
+/** Ground-control snapshot — stands, seat tape, clearances. */
 export async function GET() {
   const state = await getState();
-  const waitingByStop = state.stops.map((stop) => {
-    const waiting = state.requests.filter(
-      (r) => r.stopId === stop.id && (r.status === "waiting" || r.status === "assigned"),
-    );
-    return {
-      stop,
-      people: waiting.reduce((n, r) => n + r.partySize, 0),
-      parties: waiting.length,
-      destinations: Object.entries(
-        waiting.reduce<Record<string, number>>((acc, r) => {
-          acc[r.destinationId] = (acc[r.destinationId] ?? 0) + r.partySize;
-          return acc;
-        }, {}),
-      ).map(([destinationId, people]) => ({ destinationId, people })),
-    };
-  });
+
+  const stands = state.stops
+    .map((stop) => {
+      const open = state.parties.filter(
+        (p) =>
+          p.stopId === stop.id &&
+          (p.status === "waiting" ||
+            p.status === "cleared" ||
+            p.status === "boarding"),
+      );
+      const waiting = open.filter((p) => p.status === "waiting");
+      const cleared = open.filter(
+        (p) => p.status === "cleared" || p.status === "boarding",
+      );
+      return {
+        stop,
+        waitingSeats: waiting.reduce((n, p) => n + p.partySize, 0),
+        clearedSeats: cleared.reduce((n, p) => n + p.partySize, 0),
+        parties: open,
+        destinations: Object.entries(
+          open.reduce<Record<string, number>>((acc, p) => {
+            acc[p.destinationId] = (acc[p.destinationId] ?? 0) + p.partySize;
+            return acc;
+          }, {}),
+        ).map(([destinationId, seats]) => ({ destinationId, seats })),
+      };
+    })
+    .filter((s) => s.waitingSeats + s.clearedSeats > 0);
+
+  const fleet = state.vehicles
+    .filter((v) => v.active)
+    .map((v) => ({
+      ...v,
+      seats: seatLedger(state, v),
+    }));
 
   return NextResponse.json({
     updatedAt: state.updatedAt,
-    suggestions: state.suggestions,
-    drivers: state.drivers.filter((d) => d.active),
-    waitingByStop: waitingByStop.filter((w) => w.people > 0),
-    recentPickups: state.pickups.slice(0, 10),
+    clearances: activeClearances(state),
+    stands,
+    fleet,
+    recentEvents: state.events.slice(0, 12),
   });
 }

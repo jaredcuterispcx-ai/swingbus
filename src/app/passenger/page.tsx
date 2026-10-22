@@ -21,13 +21,15 @@ export default function PassengerHomePage() {
 
   const waitingHere = useMemo(() => {
     if (!state || !stopId) return 0;
-    return state.requests
+    return state.parties
       .filter(
-        (r) =>
-          r.stopId === stopId &&
-          (r.status === "waiting" || r.status === "assigned"),
+        (p) =>
+          p.stopId === stopId &&
+          (p.status === "waiting" ||
+            p.status === "cleared" ||
+            p.status === "boarding"),
       )
-      .reduce((n, r) => n + r.partySize, 0);
+      .reduce((n, p) => n + p.partySize, 0);
   }, [state, stopId]);
 
   async function submit(e: React.FormEvent) {
@@ -36,15 +38,19 @@ export default function PassengerHomePage() {
     setResult(null);
     setSubmitting(true);
     try {
-      const res = await fetch("/api/requests", {
+      const res = await fetch("/api/parties", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stopId, destinationId, partySize, note }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Request failed");
+      const cleared =
+        data.status === "cleared"
+          ? " Ground control already held seats on a shuttle."
+          : " You're in the stand queue.";
       setResult(
-        `Queued ${partySize} to ${stopName(state, destinationId)}. Watch the curb — dispatch is routing a shuttle.`,
+        `Party of ${partySize} → ${stopName(state, destinationId)}.${cleared}`,
       );
       setNote("");
     } catch (err) {
@@ -66,13 +72,14 @@ export default function PassengerHomePage() {
       </div>
 
       <header className="sb-rise mb-6">
-        <h1 className="sb-brand text-4xl">Need a shuttle?</h1>
+        <h1 className="sb-brand text-4xl">Need a seat?</h1>
         <p className="mt-2 text-ink-soft/85">
-          Prefer scanning the QR at your stop. Or pick the stop manually below.
+          Prefer the QR at your stand. Tell us party size and destination — we
+          hold seats on the next efficient shuttle.
         </p>
       </header>
 
-      {loading && <p className="text-sm text-ink-soft/70">Loading stops…</p>}
+      {loading && <p className="text-sm text-ink-soft/70">Loading stands…</p>}
       {error && (
         <p className="mb-4 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">
           {error}
@@ -93,7 +100,7 @@ export default function PassengerHomePage() {
               if (e.target.value === destinationId) setDestinationId("");
             }}
           >
-            <option value="">Select stop</option>
+            <option value="">Select stand</option>
             {(state?.stops ?? []).map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -104,8 +111,8 @@ export default function PassengerHomePage() {
 
         {stopId ? (
           <p className="text-sm text-ink-soft/80">
-            Currently waiting here:{" "}
-            <strong className="text-ink">{waitingHere}</strong> people
+            Seats demanded here now:{" "}
+            <strong className="text-ink">{waitingHere}</strong>
           </p>
         ) : null}
 
@@ -131,7 +138,7 @@ export default function PassengerHomePage() {
 
         <label className="block space-y-1.5">
           <span className="text-xs font-semibold tracking-wide uppercase opacity-70">
-            Party size
+            Party size (seats needed)
           </span>
           <div className="flex items-center gap-3">
             <button
@@ -174,13 +181,9 @@ export default function PassengerHomePage() {
           />
         </label>
 
-        {formError && (
-          <p className="text-sm text-danger">{formError}</p>
-        )}
+        {formError && <p className="text-sm text-danger">{formError}</p>}
         {result && (
-          <p className="rounded-xl bg-leaf/10 px-3 py-2 text-sm text-leaf">
-            {result}
-          </p>
+          <p className="rounded-xl bg-leaf/10 px-3 py-2 text-sm text-leaf">{result}</p>
         )}
 
         <button
@@ -188,13 +191,13 @@ export default function PassengerHomePage() {
           className="sb-btn sb-btn-accent w-full"
           disabled={submitting || !stopId || !destinationId}
         >
-          {submitting ? "Sending…" : "Request pickup"}
+          {submitting ? "Queuing…" : "Request seats"}
         </button>
       </form>
 
       <div className="sb-rise sb-rise-delay-2 mt-4">
         <Link href="/stops" className="sb-btn sb-btn-ghost w-full">
-          Open stop QR codes
+          Open stand QR codes
         </Link>
       </div>
     </main>

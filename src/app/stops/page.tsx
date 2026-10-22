@@ -25,10 +25,11 @@ export default function StopsPage() {
       </div>
 
       <header className="sb-rise mb-6">
-        <h1 className="sb-brand text-4xl">Stop QR codes</h1>
+        <h1 className="sb-brand text-4xl">Stand QR codes</h1>
         <p className="mt-2 max-w-xl text-ink-soft/85">
-          Tape one at each curb. Passengers scan on personal phones and join the
-          queue — no app install.
+          Tape one at each curb. Passengers scan on personal phones and request
+          seats — no app install. Generate these on the Funnel / public hostname
+          so codes work off Tailscale.
         </p>
       </header>
 

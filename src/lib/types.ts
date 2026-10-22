@@ -9,59 +9,121 @@ export interface Stop {
   description: string;
 }
 
-export type RequestStatus = "waiting" | "assigned" | "picked_up" | "cancelled";
+/** Passenger party waiting at a stand (stop). */
+export type PartyStatus =
+  | "waiting"
+  | "cleared"
+  | "boarding"
+  | "onboard"
+  | "delivered"
+  | "cancelled";
 
-export interface RideRequest {
+export interface PassengerParty {
   id: string;
   stopId: StopId;
   destinationId: StopId;
   partySize: number;
-  status: RequestStatus;
-  assignedDriverId: string | null;
+  status: PartyStatus;
+  /** Vehicle cleared / carrying this party */
+  vehicleId: string | null;
+  clearanceId: string | null;
   createdAt: string;
   updatedAt: string;
   note?: string;
+  contactHint?: string;
 }
 
-export interface Driver {
+/**
+ * Vehicle / shuttle seat ledger (airport ground-ops style):
+ *   available = capacity - occupied - reserved
+ * - occupied: heads currently onboard
+ * - reserved: seats held by issued clearances not yet boarded
+ */
+export type VehicleStatus =
+  | "available"
+  | "enroute"
+  | "at_stand"
+  | "boarding"
+  | "full"
+  | "offline";
+
+export interface Vehicle {
   id: string;
-  label: string;
+  callsign: string;
   capacity: number;
-  onboard: number;
+  occupied: number;
+  status: VehicleStatus;
   lat: number | null;
   lng: number | null;
   lastLocationAt: string | null;
-  active: boolean;
   currentStopId: StopId | null;
+  active: boolean;
   createdAt: string;
 }
 
-export interface PickupEvent {
+/** Ground-control clearance: “Vehicle X, pick up N seats at stand Y”. */
+export type ClearanceStatus =
+  | "issued"
+  | "accepted"
+  | "boarding"
+  | "completed"
+  | "cancelled";
+
+export interface Clearance {
   id: string;
-  driverId: string;
-  stopId: StopId;
-  destinationId: StopId;
-  requestIds: string[];
-  partySize: number;
-  createdAt: string;
-}
-
-export interface DispatchSuggestion {
-  driverId: string;
-  driverLabel: string;
+  vehicleId: string;
+  vehicleCallsign: string;
   stopId: StopId;
   stopName: string;
-  waitingPeople: number;
-  estimatedMinutes: number;
+  seatsReserved: number;
+  partyIds: string[];
+  destinationSummary: string;
+  etaMinutes: number;
+  status: ClearanceStatus;
   reason: string;
-  requestIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BoardingEvent {
+  id: string;
+  vehicleId: string;
+  stopId: StopId;
+  destinationId: StopId;
+  partyIds: string[];
+  seats: number;
+  kind: "board" | "alight";
+  createdAt: string;
+}
+
+/** Derived seat snapshot for UI / drivers. */
+export interface SeatLedger {
+  capacity: number;
+  occupied: number;
+  reserved: number;
+  available: number;
+}
+
+export interface StandLoad {
+  stop: Stop;
+  waitingSeats: number;
+  clearedSeats: number;
+  parties: PassengerParty[];
 }
 
 export interface AppState {
+  schemaVersion: number;
   stops: Stop[];
-  requests: RideRequest[];
-  drivers: Driver[];
-  pickups: PickupEvent[];
-  suggestions: DispatchSuggestion[];
+  parties: PassengerParty[];
+  vehicles: Vehicle[];
+  clearances: Clearance[];
+  events: BoardingEvent[];
   updatedAt: string;
 }
+
+/** @deprecated aliases kept for gradual UI migration */
+export type RideRequest = PassengerParty;
+export type Driver = Vehicle;
+export type DispatchSuggestion = Clearance;
+export type PickupEvent = BoardingEvent;
+export type RequestStatus = PartyStatus;

@@ -2,56 +2,87 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { stopName, useAppState } from "@/lib/use-app-state";
+import { stopName, useAppState, type VehicleWithSeats } from "@/lib/use-app-state";
 
-export default function DispatchPage() {
+export default function GroundControlPage() {
   const { state, loading, error, refresh } = useAppState(2000);
 
-  const waitingByStop = useMemo(() => {
+  const stands = useMemo(() => {
     if (!state) return [];
     return state.stops
       .map((stop) => {
-        const waiting = state.requests.filter(
-          (r) =>
-            r.stopId === stop.id &&
-            (r.status === "waiting" || r.status === "assigned"),
+        const open = state.parties.filter(
+          (p) =>
+            p.stopId === stop.id &&
+            (p.status === "waiting" ||
+              p.status === "cleared" ||
+              p.status === "boarding"),
         );
-        const people = waiting.reduce((n, r) => n + r.partySize, 0);
-        return { stop, people, waiting };
+        const waitingSeats = open
+          .filter((p) => p.status === "waiting")
+          .reduce((n, p) => n + p.partySize, 0);
+        const clearedSeats = open
+          .filter((p) => p.status === "cleared" || p.status === "boarding")
+          .reduce((n, p) => n + p.partySize, 0);
+        return { stop, open, waitingSeats, clearedSeats };
       })
-      .filter((row) => row.people > 0)
-      .sort((a, b) => b.people - a.people);
+      .filter((s) => s.waitingSeats + s.clearedSeats > 0)
+      .sort(
+        (a, b) =>
+          b.waitingSeats + b.clearedSeats - (a.waitingSeats + a.clearedSeats),
+      );
   }, [state]);
 
-  const activeDrivers = state?.drivers.filter((d) => d.active) ?? [];
+  const fleet: VehicleWithSeats[] =
+    state?.vehicles.filter((v) => v.active) ?? [];
+  const clearances =
+    state?.activeClearances ??
+    state?.clearances.filter(
+      (c) =>
+        c.status === "issued" ||
+        c.status === "accepted" ||
+        c.status === "boarding",
+    ) ??
+    [];
 
   async function resetDemo() {
     await fetch("/api/state", { method: "DELETE" });
     await refresh();
   }
 
+  async function seedDemo() {
+    await fetch("/api/demo/seed", { method: "POST" });
+    await refresh();
+  }
+
   return (
-    <main className="sb-shell !max-w-[720px]">
+    <main className="sb-shell !max-w-[860px]">
       <div className="mb-6 flex items-center justify-between">
         <Link href="/" className="text-sm text-ink-soft/80">
           ← Swing Bus
         </Link>
         <span className="inline-flex items-center gap-2 text-xs font-medium tracking-wide text-leaf uppercase">
-          <span className="sb-live-dot" /> Live board
+          <span className="sb-live-dot" /> Ground control
         </span>
       </div>
 
       <header className="sb-rise mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="sb-brand text-4xl">Dispatch</h1>
-          <p className="mt-2 max-w-md text-ink-soft/85">
-            Auto-routing replaces the radio desk — nearest shuttle with free
-            seats gets the longest-waiting demand first.
+          <h1 className="sb-brand text-4xl">Ground control</h1>
+          <p className="mt-2 max-w-lg text-ink-soft/85">
+            Airport-style board: stands (stops) show seat demand; vehicles show
+            free / held / onboard. Clearances auto-issue to the nearest shuttle
+            with enough available seats.
           </p>
         </div>
-        <button type="button" className="sb-btn sb-btn-ghost text-sm" onClick={resetDemo}>
-          Reset demo
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="sb-btn sb-btn-accent text-sm" onClick={seedDemo}>
+            Seed scenario
+          </button>
+          <button type="button" className="sb-btn sb-btn-ghost text-sm" onClick={resetDemo}>
+            Reset
+          </button>
+        </div>
       </header>
 
       {loading && <p className="text-sm text-ink-soft/70">Loading board…</p>}
@@ -61,29 +92,80 @@ export default function DispatchPage() {
         </p>
       )}
 
+      <section className="sb-panel sb-rise mb-4">
+        <h2 className="sb-brand text-2xl">Fleet seat tape</h2>
+        {fleet.length === 0 ? (
+          <p className="mt-3 text-sm text-ink-soft/75">
+            No vehicles on duty. A driver opens Driver mode and goes on callsign.
+          </p>
+        ) : (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {fleet.map((v) => (
+              <article
+                key={v.id}
+                className="rounded-xl border border-[var(--line)] bg-white/60 px-3 py-3"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="font-semibold">{v.callsign}</h3>
+                  <span className="text-xs uppercase tracking-wide text-leaf">
+                    {v.status}
+                  </span>
+                </div>
+                <p className="sb-brand mt-1 text-3xl tabular-nums text-ink">
+                  {v.seats.available}
+                  <span className="ml-2 text-base font-sans font-medium text-ink-soft/70">
+                    seats free
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-ink-soft/75">
+                  {v.seats.reserved} held · {v.seats.occupied}/{v.seats.capacity}{" "}
+                  onboard
+                  {v.lat != null
+                    ? ` · ${v.lat.toFixed(4)}, ${v.lng!.toFixed(4)}`
+                    : " · no GPS"}
+                </p>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-mist/50">
+                  <div
+                    className="h-full bg-leaf"
+                    style={{
+                      width: `${Math.min(100, (v.seats.occupied / v.seats.capacity) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
       <div className="grid gap-4 md:grid-cols-2">
-        <section className="sb-panel sb-rise">
-          <h2 className="sb-brand text-2xl">People by stop</h2>
-          {waitingByStop.length === 0 ? (
-            <p className="mt-3 text-sm text-ink-soft/75">All clear — no queues.</p>
+        <section className="sb-panel sb-rise sb-rise-delay-1">
+          <h2 className="sb-brand text-2xl">Stands</h2>
+          {stands.length === 0 ? (
+            <p className="mt-3 text-sm text-ink-soft/75">All stands clear.</p>
           ) : (
             <ul className="mt-3 space-y-2">
-              {waitingByStop.map(({ stop, people, waiting }) => (
+              {stands.map(({ stop, open, waitingSeats, clearedSeats }) => (
                 <li
                   key={stop.id}
                   className="rounded-xl border border-[var(--line)] bg-white/55 px-3 py-2"
                 >
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-semibold">{stop.name}</span>
-                    <span className="sb-brand text-2xl">{people}</span>
+                    <span className="font-semibold">
+                      {stop.shortCode} · {stop.name}
+                    </span>
+                    <span className="sb-brand text-2xl">
+                      {waitingSeats + clearedSeats}
+                    </span>
                   </div>
                   <p className="text-xs text-ink-soft/70">
-                    {waiting
+                    {waitingSeats} waiting · {clearedSeats} cleared
+                  </p>
+                  <p className="mt-1 text-xs text-ink-soft/80">
+                    {open
                       .map(
-                        (r) =>
-                          `${r.partySize} → ${stopName(state, r.destinationId)}${
-                            r.status === "assigned" ? " (assigned)" : ""
-                          }`,
+                        (p) =>
+                          `${p.partySize}→${stopName(state, p.destinationId)} (${p.status})`,
                       )
                       .join(" · ")}
                   </p>
@@ -93,26 +175,29 @@ export default function DispatchPage() {
           )}
         </section>
 
-        <section className="sb-panel sb-rise sb-rise-delay-1">
-          <h2 className="sb-brand text-2xl">Route suggestions</h2>
-          {(state?.suggestions.length ?? 0) === 0 ? (
+        <section className="sb-panel sb-rise sb-rise-delay-2">
+          <h2 className="sb-brand text-2xl">Clearances</h2>
+          {clearances.length === 0 ? (
             <p className="mt-3 text-sm text-ink-soft/75">
-              No assignments yet. Need waiting passengers and an active driver
-              with GPS.
+              No clearances. Need waiting passengers and a vehicle with GPS + free
+              seats.
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
-              {state!.suggestions.map((s) => (
+              {clearances.map((c) => (
                 <li
-                  key={`${s.driverId}-${s.stopId}-${s.requestIds.join("-")}`}
+                  key={c.id}
                   className="rounded-xl border border-[var(--line)] bg-leaf/10 px-3 py-2"
                 >
                   <p className="font-semibold">
-                    {s.driverLabel} → {s.stopName}
+                    {c.vehicleCallsign} → {c.stopName}
                   </p>
                   <p className="text-xs text-ink-soft/80">
-                    {s.waitingPeople} pax · ~{s.estimatedMinutes} min · {s.reason}
+                    Hold {c.seatsReserved} seats · ETA ~{c.etaMinutes} min ·{" "}
+                    {c.status}
                   </p>
+                  <p className="text-xs text-ink-soft/70">{c.destinationSummary}</p>
+                  <p className="mt-1 text-[11px] text-leaf">{c.reason}</p>
                 </li>
               ))}
             </ul>
@@ -120,49 +205,29 @@ export default function DispatchPage() {
         </section>
       </div>
 
-      <section className="sb-panel sb-rise sb-rise-delay-2 mt-4">
-        <h2 className="sb-brand text-2xl">Active shuttles</h2>
-        {activeDrivers.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-soft/75">
-            No drivers on duty. Open Driver mode on a phone to start.
-          </p>
-        ) : (
-          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-            {activeDrivers.map((d) => (
-              <li
-                key={d.id}
-                className="rounded-xl border border-[var(--line)] bg-white/55 px-3 py-2"
-              >
-                <p className="font-semibold">{d.label}</p>
-                <p className="text-xs text-ink-soft/75">
-                  {d.onboard}/{d.capacity} onboard
-                  {d.lat != null
-                    ? ` · ${d.lat.toFixed(4)}, ${d.lng!.toFixed(4)}`
-                    : " · no GPS yet"}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
       <section className="sb-panel sb-rise sb-rise-delay-3 mt-4">
-        <h2 className="sb-brand text-2xl">Recent pickups</h2>
-        {(state?.pickups.length ?? 0) === 0 ? (
-          <p className="mt-3 text-sm text-ink-soft/75">No pickups logged yet.</p>
+        <h2 className="sb-brand text-2xl">Recent movements</h2>
+        {(state?.events.length ?? 0) === 0 ? (
+          <p className="mt-3 text-sm text-ink-soft/75">No board/alight events yet.</p>
         ) : (
           <ul className="mt-3 space-y-2">
-            {state!.pickups.slice(0, 8).map((p) => {
-              const driver = state!.drivers.find((d) => d.id === p.driverId);
+            {state!.events.slice(0, 10).map((e) => {
+              const v = state!.vehicles.find((x) => x.id === e.vehicleId);
               return (
-                <li key={p.id} className="text-sm text-ink-soft/90">
+                <li key={e.id} className="text-sm text-ink-soft/90">
                   <span className="font-medium text-ink">
-                    {driver?.label ?? "Shuttle"}
+                    {v?.callsign ?? "Vehicle"}
                   </span>{" "}
-                  took {p.partySize} from {stopName(state, p.stopId)} →{" "}
-                  {stopName(state, p.destinationId)}{" "}
+                  {e.kind === "board" ? "boarded" : "alighted"} {e.seats} @{" "}
+                  {stopName(state, e.stopId)}
+                  {e.kind === "board" ? (
+                    <>
+                      {" "}
+                      → {stopName(state, e.destinationId)}
+                    </>
+                  ) : null}{" "}
                   <span className="text-xs opacity-60">
-                    {new Date(p.createdAt).toLocaleTimeString()}
+                    {new Date(e.createdAt).toLocaleTimeString()}
                   </span>
                 </li>
               );

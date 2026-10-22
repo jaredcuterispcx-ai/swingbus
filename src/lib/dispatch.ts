@@ -1,9 +1,10 @@
+import { seatLedger } from "./seats";
 import type {
   AppState,
-  DispatchSuggestion,
-  Driver,
-  RideRequest,
+  Clearance,
+  PassengerParty,
   Stop,
+  Vehicle,
 } from "./types";
 
 const EARTH_KM = 6371;
@@ -31,126 +32,97 @@ function stopById(stops: Stop[], id: string) {
   return stops.find((s) => s.id === id);
 }
 
-function driverPosition(driver: Driver, stops: Stop[]) {
-  if (driver.lat != null && driver.lng != null) {
-    return { lat: driver.lat, lng: driver.lng };
+function vehiclePosition(vehicle: Vehicle, stops: Stop[]) {
+  if (vehicle.lat != null && vehicle.lng != null) {
+    return { lat: vehicle.lat, lng: vehicle.lng };
   }
-  if (driver.currentStopId) {
-    const stop = stopById(stops, driver.currentStopId);
+  if (vehicle.currentStopId) {
+    const stop = stopById(stops, vehicle.currentStopId);
     if (stop) return { lat: stop.lat, lng: stop.lng };
   }
   return null;
 }
 
-function freeSeats(driver: Driver) {
-  return Math.max(0, driver.capacity - driver.onboard);
+function destSummary(state: AppState, parties: PassengerParty[]): string {
+  const counts = new Map<string, number>();
+  for (const p of parties) {
+    const name = stopById(state.stops, p.destinationId)?.name ?? p.destinationId;
+    counts.set(name, (counts.get(name) ?? 0) + p.partySize);
+  }
+  return [...counts.entries()]
+    .map(([name, n]) => `${n}→${name}`)
+    .join(", ");
 }
 
 /**
- * Greedy dispatcher: for each waiting stop (by wait time + party size),
- * assign the nearest active driver with enough free seats.
+ * Ground control: issue clearances so each waiting stand gets the nearest
+ * vehicle with enough *available* seats (capacity − occupied − reserved).
  */
-export function computeSuggestions(state: AppState): DispatchSuggestion[] {
-  // Include assigned-but-not-picked-up so the board keeps showing active routes.
-  const open = state.requests.filter(
-    (r) => r.status === "waiting" || r.status === "assigned",
+export function computeClearances(state: AppState): Clearance[] {
+  const waiting = state.parties.filter((p) => p.status === "waiting");
+  const alreadyCleared = state.parties.filter(
+    (p) => p.status === "cleared" || p.status === "boarding",
   );
-  if (open.length === 0) return [];
 
-  const byStop = new Map<string, RideRequest[]>();
-  for (const req of open) {
+  const byStop = new Map<string, PassengerParty[]>();
+  for (const req of waiting) {
     const list = byStop.get(req.stopId) ?? [];
     list.push(req);
     byStop.set(req.stopId, list);
   }
 
+  // Keep existing active clearances as the baseline (rebuilt below for waiting).
+  const keepExisting: Clearance[] = state.clearances.filter((c) => {
+    if (c.status === "completed" || c.status === "cancelled") return false;
+    // Drop if all parties gone
+    const still = c.partyIds.some((id) =>
+      alreadyCleared.some((p) => p.id === id),
+    );
+    return still;
+  });
+
   const stopLoads = [...byStop.entries()]
-    .map(([stopId, reqs]) => {
-      const people = reqs.reduce((n, r) => n + r.partySize, 0);
+    .map(([stopId, parties]) => {
+      const seats = parties.reduce((n, r) => n + r.partySize, 0);
       const oldest = Math.min(
-        ...reqs.map((r) => new Date(r.createdAt).getTime()),
+        ...parties.map((r) => new Date(r.createdAt).getTime()),
       );
       const waitMin = (Date.now() - oldest) / 60_000;
-      return {
-        stopId,
-        reqs,
-        people,
-        waitMin,
-        score: people * 2 + waitMin,
-      };
+      return { stopId, parties, seats, waitMin, score: seats * 2 + waitMin };
     })
     .sort((a, b) => b.score - a.score);
 
-  const drivers = state.drivers
-    .filter((d) => d.active)
-    .map((d) => ({ driver: d, remaining: freeSeats(d) }));
+  type Slot = { vehicle: Vehicle; remaining: number };
+  const slots: Slot[] = state.vehicles
+    .filter((v) => v.active)
+    .map((v) => ({ vehicle: v, remaining: seatLedger(state, v).available }));
 
-  const suggestions: DispatchSuggestion[] = [];
+  // Subtract seats already held by keepExisting clearances from slot remaining
+  // (seatLedger already counts reserved from cleared parties).
   const claimed = new Set<string>();
+  const fresh: Clearance[] = [];
+  const now = new Date().toISOString();
 
   for (const load of stopLoads) {
     const stop = stopById(state.stops, load.stopId);
     if (!stop) continue;
-
-    const unclaimed = load.reqs.filter((r) => !claimed.has(r.id));
+    const unclaimed = load.parties.filter((r) => !claimed.has(r.id));
     if (unclaimed.length === 0) continue;
 
-    type Candidate = {
-      driver: Driver;
-      remaining: number;
-      minutes: number;
-      index: number;
-    };
-
-    let best: Candidate | null = null;
-
-    // Prefer a driver already assigned to parties at this stop.
-    const preassignedId = unclaimed.find((r) => r.assignedDriverId)
-      ?.assignedDriverId;
-
-    for (let index = 0; index < drivers.length; index += 1) {
-      const slot = drivers[index];
-      if (slot.remaining <= 0) continue;
-      if (preassignedId && slot.driver.id !== preassignedId) continue;
-      const pos = driverPosition(slot.driver, state.stops);
+    let best: { slotIndex: number; minutes: number } | null = null;
+    for (let i = 0; i < slots.length; i += 1) {
+      if (slots[i].remaining <= 0) continue;
+      const pos = vehiclePosition(slots[i].vehicle, state.stops);
       if (!pos) continue;
       const km = haversineKm(pos, stop);
       const minutes = Math.max(1, Math.round((km / AVG_SHUTTLE_KMH) * 60));
-      if (!best || minutes < best.minutes) {
-        best = {
-          driver: slot.driver,
-          remaining: slot.remaining,
-          minutes,
-          index,
-        };
-      }
+      if (!best || minutes < best.minutes) best = { slotIndex: i, minutes };
     }
-
-    // If a preassigned driver has no GPS yet, fall back to nearest with seats.
-    if (!best && preassignedId) {
-      for (let index = 0; index < drivers.length; index += 1) {
-        const slot = drivers[index];
-        if (slot.remaining <= 0) continue;
-        const pos = driverPosition(slot.driver, state.stops);
-        if (!pos) continue;
-        const km = haversineKm(pos, stop);
-        const minutes = Math.max(1, Math.round((km / AVG_SHUTTLE_KMH) * 60));
-        if (!best || minutes < best.minutes) {
-          best = {
-            driver: slot.driver,
-            remaining: slot.remaining,
-            minutes,
-            index,
-          };
-        }
-      }
-    }
-
     if (!best) continue;
 
-    const chosen: Candidate = best;
-    const pack: RideRequest[] = [];
-    let seats = chosen.remaining;
+    const slot = slots[best.slotIndex];
+    const pack: PassengerParty[] = [];
+    let seats = slot.remaining;
     for (const req of unclaimed) {
       if (req.partySize <= seats) {
         pack.push(req);
@@ -160,55 +132,109 @@ export function computeSuggestions(state: AppState): DispatchSuggestion[] {
     }
     if (pack.length === 0) continue;
 
-    drivers[chosen.index].remaining = seats;
-
-    const people = pack.reduce((n, r) => n + r.partySize, 0);
+    slots[best.slotIndex].remaining = seats;
+    const seatsReserved = pack.reduce((n, p) => n + p.partySize, 0);
     const waitHint =
       load.waitMin >= 5
-        ? `${Math.round(load.waitMin)} min wait`
+        ? `${Math.round(load.waitMin)} min stand wait`
         : "fresh demand";
 
-    suggestions.push({
-      driverId: chosen.driver.id,
-      driverLabel: chosen.driver.label,
+    fresh.push({
+      id: `clr_${pack.map((p) => p.id.slice(0, 8)).join("_")}`,
+      vehicleId: slot.vehicle.id,
+      vehicleCallsign: slot.vehicle.callsign,
       stopId: stop.id,
       stopName: stop.name,
-      waitingPeople: people,
-      estimatedMinutes: chosen.minutes,
-      reason: `Nearest free capacity · ${waitHint} · ${people} pax`,
-      requestIds: pack.map((r) => r.id),
+      seatsReserved,
+      partyIds: pack.map((p) => p.id),
+      destinationSummary: destSummary(state, pack),
+      etaMinutes: best.minutes,
+      status: "issued",
+      reason: `Nearest free seats · ${waitHint} · hold ${seatsReserved}`,
+      createdAt: now,
+      updatedAt: now,
     });
   }
 
-  return suggestions;
+  // Merge: prefer fresh for waiting; keep existing for already-cleared
+  const existingIds = new Set(
+    keepExisting.flatMap((c) => c.partyIds),
+  );
+  const merged = [
+    ...keepExisting.map((c) => ({
+      ...c,
+      seatsReserved: c.partyIds
+        .map((id) => state.parties.find((p) => p.id === id))
+        .filter(Boolean)
+        .reduce((n, p) => n + (p?.partySize ?? 0), 0),
+      updatedAt: now,
+    })),
+    ...fresh.filter((c) => !c.partyIds.some((id) => existingIds.has(id))),
+  ];
+
+  return merged;
 }
 
-/** Apply suggestions: mark matching waiting requests as assigned. */
-export function applyAssignments(
+/** Apply issued clearances: waiting parties → cleared + vehicleId + reserved seats. */
+export function applyClearances(
   state: AppState,
-  suggestions: DispatchSuggestion[],
+  clearances: Clearance[],
 ): AppState {
-  const assignMap = new Map<string, string>();
-  for (const s of suggestions) {
-    for (const id of s.requestIds) assignMap.set(id, s.driverId);
+  const assignMap = new Map<string, Clearance>();
+  for (const c of clearances) {
+    if (c.status === "completed" || c.status === "cancelled") continue;
+    for (const id of c.partyIds) assignMap.set(id, c);
   }
 
   const now = new Date().toISOString();
-  const requests = state.requests.map((r) => {
-    const driverId = assignMap.get(r.id);
-    if (!driverId || r.status !== "waiting") return r;
+  const parties = state.parties.map((p) => {
+    const clr = assignMap.get(p.id);
+    if (!clr) return p;
+    if (p.status !== "waiting") {
+      // Keep linkage if already cleared/boarding
+      if (
+        (p.status === "cleared" || p.status === "boarding") &&
+        !p.clearanceId
+      ) {
+        return {
+          ...p,
+          vehicleId: clr.vehicleId,
+          clearanceId: clr.id,
+          updatedAt: now,
+        };
+      }
+      return p;
+    }
     return {
-      ...r,
-      status: "assigned" as const,
-      assignedDriverId: driverId,
+      ...p,
+      status: "cleared" as const,
+      vehicleId: clr.vehicleId,
+      clearanceId: clr.id,
       updatedAt: now,
     };
   });
 
+  const vehicles = state.vehicles.map((v) => {
+    if (!v.active) return { ...v, status: "offline" as const };
+    const ledger = seatLedger({ ...state, parties }, v);
+    let status = v.status;
+    if (ledger.available <= 0) status = "full";
+    else if (clearances.some((c) => c.vehicleId === v.id && c.status === "issued"))
+      status = "enroute";
+    else if (ledger.occupied === 0 && ledger.reserved === 0) status = "available";
+    return { ...v, status };
+  });
+
   return {
     ...state,
-    requests,
-    suggestions,
+    parties,
+    vehicles,
+    clearances,
     updatedAt: now,
   };
+}
+
+export function refreshGroundControl(state: AppState): AppState {
+  const clearances = computeClearances(state);
+  return applyClearances({ ...state, clearances }, clearances);
 }

@@ -21,20 +21,28 @@ export default function PassengerStopPage() {
     [state, stopId],
   );
 
-  const waiting = useMemo(() => {
-    if (!state) return { people: 0, parties: 0 };
-    const list = state.requests.filter(
-      (r) =>
-        r.stopId === stopId &&
-        (r.status === "waiting" || r.status === "assigned"),
+  const demand = useMemo(() => {
+    if (!state) return { seats: 0, parties: 0 };
+    const list = state.parties.filter(
+      (p) =>
+        p.stopId === stopId &&
+        (p.status === "waiting" ||
+          p.status === "cleared" ||
+          p.status === "boarding"),
     );
     return {
-      people: list.reduce((n, r) => n + r.partySize, 0),
+      seats: list.reduce((n, p) => n + p.partySize, 0),
       parties: list.length,
     };
   }, [state, stopId]);
 
-  const suggestion = state?.suggestions.find((s) => s.stopId === stopId);
+  const clearance = state?.clearances.find(
+    (c) =>
+      c.stopId === stopId &&
+      (c.status === "issued" ||
+        c.status === "accepted" ||
+        c.status === "boarding"),
+  );
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,7 +50,7 @@ export default function PassengerStopPage() {
     setFormError(null);
     setMessage(null);
     try {
-      const res = await fetch("/api/requests", {
+      const res = await fetch("/api/parties", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stopId, destinationId, partySize }),
@@ -50,7 +58,9 @@ export default function PassengerStopPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Request failed");
       setMessage(
-        `You're on the board — ${partySize} headed to ${stopName(state, destinationId)}.`,
+        data.status === "cleared"
+          ? `Seats held — party of ${partySize} to ${stopName(state, destinationId)}. Watch for your shuttle.`
+          : `Queued — party of ${partySize} to ${stopName(state, destinationId)}.`,
       );
       await refresh();
     } catch (err) {
@@ -67,11 +77,11 @@ export default function PassengerStopPage() {
           ← Passenger
         </Link>
         <span className="text-xs font-medium tracking-wide text-leaf uppercase">
-          QR check-in
+          Stand check-in
         </span>
       </div>
 
-      {loading && <p className="text-sm text-ink-soft/70">Loading stop…</p>}
+      {loading && <p className="text-sm text-ink-soft/70">Loading stand…</p>}
       {error && (
         <p className="mb-4 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">
           {error}
@@ -80,13 +90,12 @@ export default function PassengerStopPage() {
 
       {!loading && !stop && (
         <div className="sb-panel">
-          <h1 className="sb-brand text-3xl">Unknown stop</h1>
+          <h1 className="sb-brand text-3xl">Unknown stand</h1>
           <p className="mt-2 text-sm text-ink-soft/85">
-            This QR doesn&apos;t match a Swing Bus stop. Try the manual passenger
-            flow.
+            This QR doesn&apos;t match a Swing Bus stand.
           </p>
           <Link href="/passenger" className="sb-btn sb-btn-primary mt-4 inline-flex">
-            Choose stop
+            Choose stand
           </Link>
         </div>
       )}
@@ -95,7 +104,7 @@ export default function PassengerStopPage() {
         <>
           <header className="sb-rise mb-5">
             <p className="text-sm font-medium tracking-[0.16em] text-leaf uppercase">
-              Stop {stop.shortCode}
+              Stand {stop.shortCode}
             </p>
             <h1 className="sb-brand mt-1 text-4xl">{stop.name}</h1>
             <p className="mt-2 text-sm text-ink-soft/85">{stop.description}</p>
@@ -104,21 +113,22 @@ export default function PassengerStopPage() {
           <div className="sb-panel sb-rise sb-rise-delay-1 mb-4 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold tracking-wide uppercase opacity-70">
-                Waiting now
+                Seat demand
               </p>
               <p className="sb-brand text-3xl">
-                {waiting.people}
+                {demand.seats}
                 <span className="ml-2 text-base font-sans font-medium text-ink-soft/70">
-                  people · {waiting.parties} parties
+                  seats · {demand.parties} parties
                 </span>
               </p>
             </div>
-            {suggestion ? (
+            {clearance ? (
               <div className="max-w-[45%] text-right text-xs leading-snug text-leaf">
-                {suggestion.driverLabel} ~{suggestion.estimatedMinutes} min
+                {clearance.vehicleCallsign} holding {clearance.seatsReserved} · ~
+                {clearance.etaMinutes} min
               </div>
             ) : (
-              <div className="text-xs text-ink-soft/60">Awaiting shuttle</div>
+              <div className="text-xs text-ink-soft/60">Awaiting clearance</div>
             )}
           </div>
 
@@ -147,7 +157,7 @@ export default function PassengerStopPage() {
 
             <label className="block space-y-1.5">
               <span className="text-xs font-semibold tracking-wide uppercase opacity-70">
-                How many people?
+                How many seats?
               </span>
               <div className="flex items-center gap-3">
                 <button
@@ -180,7 +190,7 @@ export default function PassengerStopPage() {
               className="sb-btn sb-btn-accent w-full"
               disabled={submitting || !destinationId}
             >
-              {submitting ? "Queuing…" : "Join the queue"}
+              {submitting ? "Queuing…" : "Request seats"}
             </button>
           </form>
         </>

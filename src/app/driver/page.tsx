@@ -2,102 +2,110 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Driver } from "@/lib/types";
+import type { VehicleWithSeats } from "@/lib/use-app-state";
 import { stopName, useAppState } from "@/lib/use-app-state";
 
-const DRIVER_KEY = "swingbus.driverId";
+const VEHICLE_KEY = "swingbus.vehicleId";
 
 export default function DriverPage() {
   const { state, loading, error, refresh } = useAppState(2500);
-  const [driverId, setDriverId] = useState<string | null>(null);
-  const [label, setLabel] = useState("");
+  const [vehicleId, setVehicleId] = useState<string | null>(null);
+  const [callsign, setCallsign] = useState("");
   const [capacity, setCapacity] = useState(14);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
-  const [pickupStopId, setPickupStopId] = useState("");
-  const [pickupDestId, setPickupDestId] = useState("");
-  const [manualParty, setManualParty] = useState(1);
+  const [standId, setStandId] = useState("");
+  const [destId, setDestId] = useState("");
+  const [manualSeats, setManualSeats] = useState(1);
 
   useEffect(() => {
-    const saved = localStorage.getItem(DRIVER_KEY);
-    if (saved) setDriverId(saved);
+    const saved = localStorage.getItem(VEHICLE_KEY);
+    if (saved) setVehicleId(saved);
   }, []);
 
-  const driver: Driver | undefined = state?.drivers.find((d) => d.id === driverId);
-
-  useEffect(() => {
-    if (driver && !pickupStopId && state?.suggestions) {
-      const mine = state.suggestions.find((s) => s.driverId === driver.id);
-      if (mine) setPickupStopId(mine.stopId);
-    }
-  }, [driver, pickupStopId, state?.suggestions]);
-
-  const mySuggestions = useMemo(
-    () => (state?.suggestions ?? []).filter((s) => s.driverId === driverId),
-    [state, driverId],
+  const vehicle: VehicleWithSeats | undefined = state?.vehicles.find(
+    (v) => v.id === vehicleId,
   );
 
-  const assignedAtStop = useMemo(() => {
-    if (!state || !driverId || !pickupStopId) return [];
-    return state.requests.filter(
-      (r) =>
-        r.stopId === pickupStopId &&
-        (r.status === "waiting" || r.status === "assigned") &&
-        (!r.assignedDriverId || r.assignedDriverId === driverId),
+  const myClearances = useMemo(
+    () =>
+      (state?.clearances ?? []).filter(
+        (c) =>
+          c.vehicleId === vehicleId &&
+          (c.status === "issued" ||
+            c.status === "accepted" ||
+            c.status === "boarding"),
+      ),
+    [state, vehicleId],
+  );
+
+  useEffect(() => {
+    if (vehicle && !standId && myClearances[0]) {
+      setStandId(myClearances[0].stopId);
+    }
+  }, [vehicle, standId, myClearances]);
+
+  const queuedHere = useMemo(() => {
+    if (!state || !vehicleId || !standId) return [];
+    return state.parties.filter(
+      (p) =>
+        p.stopId === standId &&
+        (p.status === "waiting" ||
+          p.status === "cleared" ||
+          p.status === "boarding") &&
+        (!p.vehicleId || p.vehicleId === vehicleId),
     );
-  }, [state, driverId, pickupStopId]);
+  }, [state, vehicleId, standId]);
 
   const pushLocation = useCallback(
     async (lat: number, lng: number) => {
-      if (!driverId) return;
-      await fetch("/api/drivers", {
+      if (!vehicleId) return;
+      await fetch("/api/vehicles", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "location",
-          driverId,
+          vehicleId,
           lat,
           lng,
         }),
       });
       await refresh();
     },
-    [driverId, refresh],
+    [vehicleId, refresh],
   );
 
   useEffect(() => {
-    if (!driverId || !navigator.geolocation) return;
-
+    if (!vehicleId || !navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         setGeoError(null);
         void pushLocation(pos.coords.latitude, pos.coords.longitude);
       },
-      (err) => {
-        setGeoError(err.message || "Location unavailable");
-      },
+      (err) => setGeoError(err.message || "Location unavailable"),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
     );
-
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [driverId, pushLocation]);
+  }, [vehicleId, pushLocation]);
 
   async function register(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setStatus(null);
     try {
-      const res = await fetch("/api/drivers", {
+      const res = await fetch("/api/vehicles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label, capacity }),
+        body: JSON.stringify({ callsign, capacity }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
-      localStorage.setItem(DRIVER_KEY, data.id);
-      setDriverId(data.id);
-      setStatus(`Shuttle ${data.label} is live.`);
+      localStorage.setItem(VEHICLE_KEY, data.id);
+      setVehicleId(data.id);
+      setStatus(
+        `${data.callsign} on duty · ${data.seats?.available ?? data.capacity} seats free`,
+      );
       await refresh();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Failed");
@@ -107,35 +115,34 @@ export default function DriverPage() {
   }
 
   async function goOffline() {
-    if (!driverId) return;
-    await fetch("/api/drivers", {
+    if (!vehicleId) return;
+    await fetch("/api/vehicles", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "active", driverId, active: false }),
+      body: JSON.stringify({ action: "active", vehicleId, active: false }),
     });
-    localStorage.removeItem(DRIVER_KEY);
-    setDriverId(null);
+    localStorage.removeItem(VEHICLE_KEY);
+    setVehicleId(null);
     await refresh();
   }
 
-  async function confirmPickup(requestIds?: string[]) {
-    if (!driverId || !pickupStopId || !pickupDestId) return;
+  async function accept(clearanceId: string) {
+    if (!vehicleId) return;
     setBusy(true);
     try {
-      const res = await fetch("/api/pickups", {
-        method: "POST",
+      const res = await fetch("/api/vehicles", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          driverId,
-          stopId: pickupStopId,
-          destinationId: pickupDestId,
-          requestIds,
-          partySize: requestIds?.length ? undefined : manualParty,
+          action: "accept_clearance",
+          vehicleId,
+          clearanceId,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Pickup failed");
-      setStatus(`Pickup logged · ${data.partySize} onboard from ${stopName(state, pickupStopId)}.`);
+      if (!res.ok) throw new Error(data.error || "Failed");
+      setStatus(`Clearance accepted · enroute to ${data.stopName}`);
+      setStandId(data.stopId);
       await refresh();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Failed");
@@ -144,24 +151,53 @@ export default function DriverPage() {
     }
   }
 
-  async function doDropoff() {
-    if (!driverId) return;
+  async function board(partyIds?: string[]) {
+    if (!vehicleId || !standId) return;
     setBusy(true);
     try {
-      const res = await fetch("/api/pickups", {
+      const res = await fetch("/api/board", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "dropoff",
-          driverId,
-          partySize: Math.max(1, driver?.onboard ?? 1),
+          vehicleId,
+          stopId: standId,
+          destinationId: destId || undefined,
+          partyIds,
+          seats: partyIds?.length ? undefined : manualSeats,
         }),
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Dropoff failed");
-      }
-      setStatus("Seats freed after drop-off.");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Board failed");
+      const seats = data.ledger;
+      setStatus(
+        `Boarded ${data.event.seats} · ${seats.available} free · ${seats.occupied}/${seats.capacity} onboard`,
+      );
+      await refresh();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doAlight() {
+    if (!vehicleId || !vehicle) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/board", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "alight",
+          vehicleId,
+          seats: Math.max(1, vehicle.seats.occupied),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Alight failed");
+      setStatus(
+        `Alighted · ${data.ledger.available} seats free on ${data.vehicle.callsign}`,
+      );
       await refresh();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Failed");
@@ -177,15 +213,16 @@ export default function DriverPage() {
           ← Swing Bus
         </Link>
         <span className="inline-flex items-center gap-2 text-xs font-medium tracking-wide text-amber uppercase">
-          <span className="sb-live-dot" style={{ background: "var(--amber-soft)" }} /> Driver
+          <span className="sb-live-dot" style={{ background: "var(--amber-soft)" }} />{" "}
+          Vehicle
         </span>
       </div>
 
       <header className="sb-rise mb-5">
-        <h1 className="sb-brand text-4xl">Shuttle seat</h1>
+        <h1 className="sb-brand text-4xl">Driver / vehicle</h1>
         <p className="mt-2 text-ink-soft/85">
-          Label your bus, keep GPS on, and confirm each pickup so dispatch stays
-          honest.
+          Your callsign publishes seat capacity. Ground control holds seats when
+          it clears you to a stand — board to convert holds into occupied.
         </p>
       </header>
 
@@ -196,23 +233,23 @@ export default function DriverPage() {
         </p>
       )}
 
-      {!driverId || !driver ? (
+      {!vehicleId || !vehicle ? (
         <form onSubmit={register} className="sb-panel sb-rise space-y-4">
           <label className="block space-y-1.5">
             <span className="text-xs font-semibold tracking-wide uppercase opacity-70">
-              Shuttle label
+              Callsign
             </span>
             <input
               className="sb-input"
               required
               placeholder="e.g. Shuttle 3 / Green"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
+              value={callsign}
+              onChange={(e) => setCallsign(e.target.value)}
             />
           </label>
           <label className="block space-y-1.5">
             <span className="text-xs font-semibold tracking-wide uppercase opacity-70">
-              Capacity
+              Seat capacity
             </span>
             <input
               className="sb-input"
@@ -233,53 +270,77 @@ export default function DriverPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold tracking-wide uppercase opacity-70">
-                  On duty
+                  Seat tape · {vehicle.status}
                 </p>
-                <h2 className="sb-brand text-3xl">{driver.label}</h2>
+                <h2 className="sb-brand text-3xl">{vehicle.callsign}</h2>
+                <p className="sb-brand mt-2 text-4xl tabular-nums">
+                  {vehicle.seats.available}
+                  <span className="ml-2 text-lg font-sans font-medium text-ink-soft/70">
+                    free
+                  </span>
+                </p>
                 <p className="mt-1 text-sm text-ink-soft/80">
-                  {driver.onboard}/{driver.capacity} seats filled
-                  {driver.lastLocationAt
-                    ? ` · GPS ${new Date(driver.lastLocationAt).toLocaleTimeString()}`
-                    : " · waiting for GPS"}
+                  {vehicle.seats.reserved} held by clearances ·{" "}
+                  {vehicle.seats.occupied}/{vehicle.seats.capacity} onboard
                 </p>
               </div>
               <button type="button" className="sb-btn sb-btn-ghost text-sm" onClick={goOffline}>
                 End
               </button>
             </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-mist/50">
+              <div
+                className="h-full bg-amber"
+                style={{
+                  width: `${(vehicle.seats.occupied / vehicle.seats.capacity) * 100}%`,
+                }}
+              />
+            </div>
             {geoError && (
               <p className="mt-3 text-sm text-amber">
-                Location: {geoError}. Allow location for better routing.
+                Location: {geoError}. Allow GPS so ground control can route you.
               </p>
             )}
           </section>
 
           <section className="sb-panel sb-rise sb-rise-delay-1">
-            <h3 className="sb-brand text-xl">Your assignments</h3>
-            {mySuggestions.length === 0 ? (
+            <h3 className="sb-brand text-xl">Your clearances</h3>
+            {myClearances.length === 0 ? (
               <p className="mt-2 text-sm text-ink-soft/75">
-                No active suggestion — cruise or wait for demand.
+                No active clearance — keep GPS on and wait for stand demand.
               </p>
             ) : (
               <ul className="mt-3 space-y-2">
-                {mySuggestions.map((s) => (
+                {myClearances.map((c) => (
                   <li
-                    key={`${s.stopId}-${s.requestIds.join(",")}`}
+                    key={c.id}
                     className="rounded-xl border border-[var(--line)] bg-white/60 px-3 py-2"
                   >
                     <p className="font-semibold">
-                      Pick up {s.waitingPeople} at {s.stopName}
+                      {c.stopName} · hold {c.seatsReserved} seats
                     </p>
                     <p className="text-xs text-ink-soft/75">
-                      ~{s.estimatedMinutes} min · {s.reason}
+                      ~{c.etaMinutes} min · {c.destinationSummary} · {c.status}
                     </p>
-                    <button
-                      type="button"
-                      className="sb-btn sb-btn-ghost mt-2 text-sm"
-                      onClick={() => setPickupStopId(s.stopId)}
-                    >
-                      Use this stop
-                    </button>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {c.status === "issued" && (
+                        <button
+                          type="button"
+                          className="sb-btn sb-btn-accent text-sm"
+                          disabled={busy}
+                          onClick={() => void accept(c.id)}
+                        >
+                          Accept clearance
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="sb-btn sb-btn-ghost text-sm"
+                        onClick={() => setStandId(c.stopId)}
+                      >
+                        Set stand
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -287,17 +348,17 @@ export default function DriverPage() {
           </section>
 
           <section className="sb-panel sb-rise sb-rise-delay-2 space-y-3">
-            <h3 className="sb-brand text-xl">Log a pickup</h3>
+            <h3 className="sb-brand text-xl">Board at stand</h3>
             <label className="block space-y-1.5">
               <span className="text-xs font-semibold tracking-wide uppercase opacity-70">
-                Stop
+                Stand
               </span>
               <select
                 className="sb-select"
-                value={pickupStopId}
-                onChange={(e) => setPickupStopId(e.target.value)}
+                value={standId}
+                onChange={(e) => setStandId(e.target.value)}
               >
-                <option value="">Select stop</option>
+                <option value="">Select stand</option>
                 {(state?.stops ?? []).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -312,12 +373,12 @@ export default function DriverPage() {
               </span>
               <select
                 className="sb-select"
-                value={pickupDestId}
-                onChange={(e) => setPickupDestId(e.target.value)}
+                value={destId}
+                onChange={(e) => setDestId(e.target.value)}
               >
-                <option value="">Select destination</option>
+                <option value="">Any / select</option>
                 {(state?.stops ?? [])
-                  .filter((s) => s.id !== pickupStopId)
+                  .filter((s) => s.id !== standId)
                   .map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
@@ -326,30 +387,30 @@ export default function DriverPage() {
               </select>
             </label>
 
-            {assignedAtStop.length > 0 && (
+            {queuedHere.length > 0 && (
               <div className="rounded-xl bg-leaf/10 px-3 py-2 text-sm">
                 <p className="font-medium text-leaf">
-                  {assignedAtStop.reduce((n, r) => n + r.partySize, 0)} queued here
-                  for you
+                  {queuedHere.reduce((n, p) => n + p.partySize, 0)} seats queued
+                  here for you
                 </p>
                 <button
                   type="button"
                   className="sb-btn sb-btn-accent mt-2 w-full"
-                  disabled={busy || !pickupDestId}
+                  disabled={busy}
                   onClick={() => {
-                    const ids = assignedAtStop
-                      .filter((r) => r.destinationId === pickupDestId)
-                      .map((r) => r.id);
-                    if (ids.length === 0) {
-                      setStatus(
-                        "No queued parties for that destination — use manual headcount or pick another destination.",
-                      );
+                    const ids = destId
+                      ? queuedHere
+                          .filter((p) => p.destinationId === destId)
+                          .map((p) => p.id)
+                      : queuedHere.map((p) => p.id);
+                    if (!ids.length) {
+                      setStatus("No parties for that destination at this stand.");
                       return;
                     }
-                    void confirmPickup(ids);
+                    void board(ids);
                   }}
                 >
-                  Confirm queued pickups
+                  Board queued parties
                 </button>
               </div>
             )}
@@ -357,34 +418,34 @@ export default function DriverPage() {
             <div className="flex items-end gap-2">
               <label className="block flex-1 space-y-1.5">
                 <span className="text-xs font-semibold tracking-wide uppercase opacity-70">
-                  Or manual headcount
+                  Manual seat count
                 </span>
                 <input
                   className="sb-input"
                   type="number"
                   min={1}
                   max={40}
-                  value={manualParty}
-                  onChange={(e) => setManualParty(Number(e.target.value) || 1)}
+                  value={manualSeats}
+                  onChange={(e) => setManualSeats(Number(e.target.value) || 1)}
                 />
               </label>
               <button
                 type="button"
                 className="sb-btn sb-btn-primary"
-                disabled={busy || !pickupStopId || !pickupDestId}
-                onClick={() => void confirmPickup()}
+                disabled={busy || !standId}
+                onClick={() => void board()}
               >
-                Log
+                Board
               </button>
             </div>
 
             <button
               type="button"
               className="sb-btn sb-btn-ghost w-full"
-              disabled={busy || !driver.onboard}
-              onClick={() => void doDropoff()}
+              disabled={busy || !vehicle.seats.occupied}
+              onClick={() => void doAlight()}
             >
-              Drop off onboard passengers
+              Alight all onboard ({vehicle.seats.occupied})
             </button>
           </section>
         </div>
@@ -393,6 +454,12 @@ export default function DriverPage() {
       {status && (
         <p className="sb-rise mt-4 rounded-xl bg-white/70 px-3 py-2 text-sm text-ink-soft">
           {status}
+        </p>
+      )}
+
+      {standId && (
+        <p className="mt-2 text-center text-xs text-ink-soft/50">
+          Stand {stopName(state, standId)}
         </p>
       )}
     </main>

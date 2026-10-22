@@ -1,10 +1,20 @@
 # Swing Bus — deployment guide
 
-Next.js 15 app for xAI employees. Goals:
+Next.js 15 app for xAI employees. Product model (seats / clearances / stands): see `docs/GROUND-CONTROL.md`.
+
+Goals:
 
 1. **Lasting home** runs on **xAI internal infrastructure** (not a random public PaaS).
 2. **Personal phones** must reach it **without Tailscale**.
 3. Ship a **POC ASAP**, then migrate to the lasting home.
+
+**Morning-after checklist (copy to an internal host):**
+
+```bash
+git pull && npm ci && npm run build && npm start
+./scripts/expose-funnel.sh 43127   # needs Funnel enabled in Tailscale admin
+# phones → printed https://….ts.net   |   QR codes → open /stops on that URL
+```
 
 Artifacts in this repo: `Dockerfile` (standalone), `docker-compose.yml`, `next.config.ts` (`output: "standalone"`).
 
