@@ -332,6 +332,7 @@ export async function boardParties(input: {
     const now = new Date().toISOString();
     let partyIds = input.partyIds ?? [];
     let seats = input.seats ?? 0;
+    let parties = state.parties;
 
     if (partyIds.length === 0) {
       const candidates = state.parties.filter(
@@ -343,8 +344,26 @@ export async function boardParties(input: {
           (!p.vehicleId || p.vehicleId === input.vehicleId) &&
           (!input.destinationId || p.destinationId === input.destinationId),
       );
-      partyIds = candidates.map((c) => c.id);
-      seats = candidates.reduce((n, c) => n + c.partySize, 0);
+      if (candidates.length > 0) {
+        partyIds = candidates.map((c) => c.id);
+        seats = candidates.reduce((n, c) => n + c.partySize, 0);
+      } else if (input.destinationId && (input.seats ?? 0) > 0) {
+        // Driver-logged group: pax count + destination at this stop.
+        const manual: PassengerParty = {
+          id: randomUUID(),
+          stopId: input.stopId,
+          destinationId: input.destinationId,
+          partySize: Math.max(1, Math.floor(input.seats!)),
+          status: "boarding",
+          vehicleId: input.vehicleId,
+          clearanceId: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        parties = [...state.parties, manual];
+        partyIds = [manual.id];
+        seats = manual.partySize;
+      }
     } else if (!seats) {
       seats = state.parties
         .filter((p) => partyIds.includes(p.id))
@@ -366,10 +385,10 @@ export async function boardParties(input: {
     const idSet = new Set(partyIds);
     const dest =
       input.destinationId ??
-      state.parties.find((p) => idSet.has(p.id))?.destinationId ??
+      parties.find((p) => idSet.has(p.id))?.destinationId ??
       input.stopId;
 
-    const parties = state.parties.map((p) =>
+    parties = parties.map((p) =>
       idSet.has(p.id)
         ? {
             ...p,
