@@ -109,51 +109,63 @@ export function computeClearances(state: AppState): Clearance[] {
     const unclaimed = load.parties.filter((r) => !claimed.has(r.id));
     if (unclaimed.length === 0) continue;
 
-    let best: { slotIndex: number; minutes: number } | null = null;
+    // Rank vehicles by ETA; try each until someone can take at least one party.
+    const ranked: { slotIndex: number; minutes: number }[] = [];
     for (let i = 0; i < slots.length; i += 1) {
       if (slots[i].remaining <= 0) continue;
       const pos = vehiclePosition(slots[i].vehicle, state.stops);
       if (!pos) continue;
       const km = haversineKm(pos, stop);
       const minutes = Math.max(1, Math.round((km / AVG_SHUTTLE_KMH) * 60));
-      if (!best || minutes < best.minutes) best = { slotIndex: i, minutes };
+      ranked.push({ slotIndex: i, minutes });
     }
-    if (!best) continue;
+    ranked.sort((a, b) => a.minutes - b.minutes);
 
-    const slot = slots[best.slotIndex];
-    const pack: PassengerParty[] = [];
-    let seats = slot.remaining;
-    for (const req of unclaimed) {
-      if (req.partySize <= seats) {
-        pack.push(req);
-        seats -= req.partySize;
-        claimed.add(req.id);
+    let assignedAny = false;
+    for (const candidate of ranked) {
+      const stillUnclaimed = unclaimed.filter((r) => !claimed.has(r.id));
+      if (stillUnclaimed.length === 0) break;
+
+      const slot = slots[candidate.slotIndex];
+      if (slot.remaining <= 0) continue;
+
+      const pack: PassengerParty[] = [];
+      let seats = slot.remaining;
+      for (const req of stillUnclaimed) {
+        if (req.partySize <= seats) {
+          pack.push(req);
+          seats -= req.partySize;
+          claimed.add(req.id);
+        }
       }
+      if (pack.length === 0) continue;
+
+      slots[candidate.slotIndex].remaining = seats;
+      const seatsReserved = pack.reduce((n, p) => n + p.partySize, 0);
+      const waitHint =
+        load.waitMin >= 5
+          ? `${Math.round(load.waitMin)} min stand wait`
+          : "fresh demand";
+
+      fresh.push({
+        id: `clr_${pack.map((p) => p.id.slice(0, 8)).join("_")}`,
+        vehicleId: slot.vehicle.id,
+        vehicleCallsign: slot.vehicle.callsign,
+        stopId: stop.id,
+        stopName: stop.name,
+        seatsReserved,
+        partyIds: pack.map((p) => p.id),
+        destinationSummary: destSummary(state, pack),
+        etaMinutes: candidate.minutes,
+        status: "issued",
+        reason: `Nearest free seats · ${waitHint} · hold ${seatsReserved}`,
+        createdAt: now,
+        updatedAt: now,
+      });
+      assignedAny = true;
+      // Keep trying other vehicles for leftover parties at this stand.
     }
-    if (pack.length === 0) continue;
-
-    slots[best.slotIndex].remaining = seats;
-    const seatsReserved = pack.reduce((n, p) => n + p.partySize, 0);
-    const waitHint =
-      load.waitMin >= 5
-        ? `${Math.round(load.waitMin)} min stand wait`
-        : "fresh demand";
-
-    fresh.push({
-      id: `clr_${pack.map((p) => p.id.slice(0, 8)).join("_")}`,
-      vehicleId: slot.vehicle.id,
-      vehicleCallsign: slot.vehicle.callsign,
-      stopId: stop.id,
-      stopName: stop.name,
-      seatsReserved,
-      partyIds: pack.map((p) => p.id),
-      destinationSummary: destSummary(state, pack),
-      etaMinutes: best.minutes,
-      status: "issued",
-      reason: `Nearest free seats · ${waitHint} · hold ${seatsReserved}`,
-      createdAt: now,
-      updatedAt: now,
-    });
+    if (!assignedAny) continue;
   }
 
   // Merge: prefer fresh for waiting; keep existing for already-cleared
