@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/app-header";
+import { randomElectricCallsign } from "@/lib/callsigns";
 import type { VehicleWithSeats } from "@/lib/use-app-state";
 import { stopName, useAppState } from "@/lib/use-app-state";
 
@@ -23,6 +24,17 @@ export default function DriverPage() {
     const saved = localStorage.getItem(VEHICLE_KEY);
     if (saved) setVehicleId(saved);
   }, []);
+
+  // Default to a random electricity-themed callsign not already on duty.
+  useEffect(() => {
+    if (vehicleId || !state || callsign) return;
+    setCallsign(randomElectricCallsign(state.vehicles));
+  }, [state, vehicleId, callsign]);
+
+  function reshuffleCallsign() {
+    setCallsign(randomElectricCallsign(state?.vehicles ?? []));
+    setStatus(null);
+  }
 
   const vehicle: VehicleWithSeats | undefined = state?.vehicles.find(
     (v) => v.id === vehicleId,
@@ -108,7 +120,11 @@ export default function DriverPage() {
       );
       await refresh();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Failed");
+      const msg = err instanceof Error ? err.message : "Failed";
+      setStatus(msg);
+      if (/already on duty/i.test(msg)) {
+        setCallsign(randomElectricCallsign(state?.vehicles ?? []));
+      }
     } finally {
       setBusy(false);
     }
