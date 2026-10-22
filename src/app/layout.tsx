@@ -17,8 +17,9 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   title: "Swing Bus · XSI",
   description:
-    "Passenger and driver shuttle dispatch for XSI — scan a stop, request a ride, route shuttles intelligently.",
+    "Airport-style ground control for XSI shuttles — seat demand, vehicle seat tape, automatic clearances.",
   applicationName: "Swing Bus",
+  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     title: "Swing Bus",

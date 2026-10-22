@@ -57,12 +57,27 @@ export default function PassengerStopPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Request failed");
-      setMessage(
-        data.status === "cleared"
-          ? `Seats held — party of ${partySize} to ${stopName(state, destinationId)}. Watch for your shuttle.`
-          : `Queued — party of ${partySize} to ${stopName(state, destinationId)}.`,
-      );
       await refresh();
+      const after = await fetch("/api/state", { cache: "no-store" }).then((r) =>
+        r.json(),
+      );
+      const mine = after.parties?.find((p: { id: string }) => p.id === data.id);
+      const clr = after.clearances?.find(
+        (c: { id: string }) => c.id === mine?.clearanceId,
+      );
+      if (mine?.status === "cleared" && clr) {
+        setMessage(
+          `Seats held on ${clr.vehicleCallsign} — party of ${partySize} to ${stopName(state, destinationId)}. ETA ~${clr.etaMinutes} min.`,
+        );
+      } else if (mine?.status === "cleared") {
+        setMessage(
+          `Seats held — party of ${partySize} to ${stopName(state, destinationId)}. Watch for your shuttle.`,
+        );
+      } else {
+        setMessage(
+          `Queued — party of ${partySize} to ${stopName(state, destinationId)}. Ground control will hold seats when a bus has room.`,
+        );
+      }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Failed");
     } finally {

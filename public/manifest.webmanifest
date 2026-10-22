@@ -1,0 +1,10 @@
+{
+  "name": "Swing Bus",
+  "short_name": "Swing Bus",
+  "description": "XSI shuttle ground control — passenger and driver",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e8f3ee",
+  "theme_color": "#1f7a5c",
+  "icons": []
+}

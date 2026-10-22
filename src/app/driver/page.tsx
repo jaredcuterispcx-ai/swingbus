@@ -311,38 +311,57 @@ export default function DriverPage() {
               </p>
             ) : (
               <ul className="mt-3 space-y-2">
-                {myClearances.map((c) => (
-                  <li
-                    key={c.id}
-                    className="rounded-xl border border-[var(--line)] bg-white/60 px-3 py-2"
-                  >
-                    <p className="font-semibold">
-                      {c.stopName} · hold {c.seatsReserved} seats
-                    </p>
-                    <p className="text-xs text-ink-soft/75">
-                      ~{c.etaMinutes} min · {c.destinationSummary} · {c.status}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {c.status === "issued" && (
+                {myClearances.map((c) => {
+                  const parties = (state?.parties ?? []).filter((p) =>
+                    c.partyIds.includes(p.id),
+                  );
+                  return (
+                    <li
+                      key={c.id}
+                      className="rounded-xl border border-[var(--line)] bg-white/60 px-3 py-2"
+                    >
+                      <p className="font-semibold">
+                        {c.stopName} · hold {c.seatsReserved} seats
+                      </p>
+                      <p className="text-xs text-ink-soft/75">
+                        ~{c.etaMinutes} min · {c.destinationSummary} · {c.status}
+                      </p>
+                      {parties.length > 0 && (
+                        <ul className="mt-2 space-y-1 border-t border-[var(--line)] pt-2 text-xs text-ink-soft/80">
+                          {parties.map((p) => (
+                            <li key={p.id}>
+                              {p.partySize} seats → {stopName(state, p.destinationId)}
+                              {p.note ? ` · ${p.note}` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {c.status === "issued" && (
+                          <button
+                            type="button"
+                            className="sb-btn sb-btn-accent text-sm"
+                            disabled={busy}
+                            onClick={() => void accept(c.id)}
+                          >
+                            Accept clearance
+                          </button>
+                        )}
                         <button
                           type="button"
-                          className="sb-btn sb-btn-accent text-sm"
-                          disabled={busy}
-                          onClick={() => void accept(c.id)}
+                          className="sb-btn sb-btn-ghost text-sm"
+                          onClick={() => {
+                            setStandId(c.stopId);
+                            const firstDest = parties[0]?.destinationId;
+                            if (firstDest) setDestId(firstDest);
+                          }}
                         >
-                          Accept clearance
+                          Set stand
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        className="sb-btn sb-btn-ghost text-sm"
-                        onClick={() => setStandId(c.stopId)}
-                      >
-                        Set stand
-                      </button>
-                    </div>
-                  </li>
-                ))}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>
