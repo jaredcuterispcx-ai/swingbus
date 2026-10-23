@@ -1,0 +1,17 @@
+{
+  "name": "swingbus",
+  "short_name": "swingbus",
+  "description": "Campus shuttles — pick your stop, see the next bus.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/bolt.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,350 @@
+@import "tailwindcss";
+
+/* Black / white / one electric accent. */
+:root {
+  --void: #ffffff;
+  --ink: #000000;
+  --ink-soft: #5e5e5e;
+  --foam: #f6f6f6;
+  --mist: #eeeeee;
+  /* "leaf" is the emphasis color for text/borders: black on white. */
+  --leaf: #000000;
+  --leaf-bright: #222222;
+  --volt: #ffd400;
+  --amber: #a15c00;
+  --amber-soft: #fff4d6;
+  --danger: #e11900;
+  --line: #e8e8e8;
+  --surface: #ffffff;
+  --surface-2: #eeeeee;
+  --background: var(--void);
+  --foreground: var(--ink);
+  --sb-font-sans: "Inter Variable", system-ui, -apple-system, sans-serif;
+  --sb-font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-foam: var(--foam);
+  --color-mist: var(--mist);
+  --color-leaf: var(--leaf);
+  --color-leaf-bright: var(--leaf-bright);
+  --color-volt: var(--volt);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-danger: var(--danger);
+  --color-surface: var(--surface);
+  --font-sans: var(--sb-font-sans);
+  --font-display: var(--sb-font-sans);
+  --font-mono: var(--sb-font-mono);
+}
+
+@layer base {
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  color: var(--ink);
+  background: var(--void);
+  font-family: var(--sb-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+}
+
+/* In the components layer so Tailwind utilities (pl-11, bg-white…) can override. */
+@layer components {
+.sb-shell {
+  flex: 1 0 auto;
+  width: min(480px, 100%);
+  margin: 0 auto;
+  padding: calc(0.75rem + env(safe-area-inset-top)) 1rem
+    calc(1.5rem + env(safe-area-inset-bottom));
+}
+
+.sb-brand {
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.sb-wordmark {
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  text-transform: lowercase;
+}
+
+.sb-panel {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.sb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 3rem;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.8rem 1.1rem;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms ease, background 120ms ease, opacity 120ms ease;
+}
+
+.sb-btn:active {
+  transform: scale(0.98);
+}
+
+.sb-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.sb-btn-primary,
+.sb-btn-accent {
+  background: #000;
+  color: #fff;
+}
+
+.sb-btn-primary:hover:not(:disabled),
+.sb-btn-accent:hover:not(:disabled) {
+  background: #222;
+}
+
+.sb-btn-ghost {
+  background: var(--mist);
+  color: var(--ink);
+}
+
+.sb-btn-ghost:hover:not(:disabled) {
+  background: #e2e2e2;
+}
+
+.sb-btn-lg {
+  min-height: 3.5rem;
+  font-size: 1.05rem;
+}
+
+.sb-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  background: var(--mist);
+  flex-shrink: 0;
+}
+
+.sb-input,
+.sb-select {
+  width: 100%;
+  min-height: 3.1rem;
+  border: 2px solid transparent;
+  background: var(--mist);
+  border-radius: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  color: var(--ink);
+  /* 16px keeps iOS Safari from zooming into focused fields */
+  font-size: 16px;
+}
+
+.sb-input::placeholder {
+  color: #8a8a8a;
+}
+
+.sb-input:focus,
+.sb-select:focus {
+  outline: none;
+  border-color: #000;
+  background: #fff;
+}
+
+.sb-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.6rem;
+  text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.9rem center;
+}
+
+.sb-select:disabled {
+  opacity: 0.5;
+}
+
+.sb-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.sb-seg {
+  min-height: 2.9rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: var(--mist);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.sb-seg-on {
+  background: #000;
+  color: #fff;
+}
+
+/* Uber-style list row: icon, label, trailing meta, hairline divider */
+.sb-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  min-height: 3.75rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sb-row:last-child {
+  border-bottom: none;
+}
+
+.sb-row:active {
+  background: var(--foam);
+}
+
+.sb-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 0.75rem;
+  background: var(--foam);
+  transition: background 120ms ease;
+}
+
+.sb-mode-row:hover {
+  background: var(--mist);
+}
+
+.sb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.sb-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  background: var(--mist);
+}
+
+.sb-pill-dark {
+  background: #000;
+  color: #fff;
+}
+
+.sb-sheet {
+  border-radius: 1rem 1rem 0 0;
+  background: #fff;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.08);
+}
+
+.sb-sticky-cta {
+  position: sticky;
+  bottom: 0;
+  padding: 0.75rem 0 calc(0.75rem + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, #fff 75%, rgba(255, 255, 255, 0));
+}
+
+@keyframes sb-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sb-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 212, 0, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 212, 0, 0);
+  }
+}
+
+.sb-rise {
+  animation: sb-rise 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.sb-rise-delay-1 {
+  animation-delay: 50ms;
+}
+
+.sb-rise-delay-2 {
+  animation-delay: 100ms;
+}
+
+.sb-rise-delay-3 {
+  animation-delay: 150ms;
+}
+
+.sb-live-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--volt);
+  animation: sb-pulse 1.8s ease infinite;
+}
+}
