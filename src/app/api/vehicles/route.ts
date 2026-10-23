@@ -52,7 +52,9 @@ export async function PATCH(req: Request) {
     }
 
     if (body.action === "active") {
-      const vehicle = await setVehicleActive(vehicleId, Boolean(body.active));
+      const vehicle = await setVehicleActive(vehicleId, Boolean(body.active), {
+        dropOff: Boolean(body.dropOff),
+      });
       if (!vehicle) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
       }

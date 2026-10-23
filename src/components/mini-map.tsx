@@ -6,7 +6,14 @@ import type { Stop } from "@/lib/types";
 
 const CLUSTER_M = 2500;
 
-type MapVehicle = { id: string; lat: number | null; lng: number | null; highlight?: boolean };
+type MapVehicle = {
+  id: string;
+  lat: number | null;
+  lng: number | null;
+  highlight?: boolean;
+  /** Not heard from lately: the position may be old. */
+  faded?: boolean;
+};
 
 const W = 400;
 const H = 220;
@@ -119,7 +126,7 @@ export function MiniMap({
         const p = view(v.lat, v.lng);
         const r = v.highlight ? 13 : 11;
         return (
-          <g key={v.id} transform={`translate(${p.x} ${p.y})`}>
+          <g key={v.id} transform={`translate(${p.x} ${p.y})`} opacity={v.faded ? 0.35 : 1}>
             <circle r={r} fill="#000" stroke={v.highlight ? "var(--volt)" : "#fff"} strokeWidth="2.5" />
             <path
               d="M1.2 -7.5 -4.6 0.8h3.9l-1 6.7 6.3-8.4H0.7l0.5-7.6Z"

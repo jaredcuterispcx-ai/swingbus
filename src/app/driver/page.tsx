@@ -6,6 +6,7 @@ import { PinIcon, UsersIcon } from "@/components/icons";
 import { SignOutButton } from "@/components/sign-out";
 import { randomElectricCallsign } from "@/lib/callsigns";
 import { formatDistance, stopsByDistance } from "@/lib/geo";
+import { HEARTBEAT_MS } from "@/lib/lifecycle";
 import type { VehicleWithSeats } from "@/lib/use-app-state";
 import { stopName, useStaffState } from "@/lib/use-app-state";
 
@@ -30,12 +31,16 @@ export default function DriverPage() {
   const [destId, setDestId] = useState("");
   const [pax, setPax] = useState(1);
   const [groups, setGroups] = useState<PickupGroup[]>([]);
+  const [confirmOffline, setConfirmOffline] = useState(false);
+  /** Suggested group waiting on a second tap to be marked as a no-show. */
+  const [noShowKey, setNoShowKey] = useState<string | null>(null);
   const [pos, setPos] = useState<{ lat: number; lng: number; accuracy: number } | null>(
     null,
   );
   /** Last stop we auto-selected for; a manual pick sticks until the next arrival. */
   const lastArrivalRef = useRef<string | null>(null);
   const lastPushRef = useRef<{ at: number; stopId: string | null }>({ at: 0, stopId: null });
+  const lastFixRef = useRef<{ lat: number; lng: number } | null>(null);
   const callsignSeeded = useRef(false);
   const stopsRef = useRef(state?.stops ?? []);
   stopsRef.current = state?.stops ?? stopsRef.current;
@@ -47,6 +52,12 @@ export default function DriverPage() {
   }, [status]);
 
   useEffect(() => {
+    if (!noShowKey) return;
+    const t = setTimeout(() => setNoShowKey(null), 4000);
+    return () => clearTimeout(t);
+  }, [noShowKey]);
+
+  useEffect(() => {
     const saved = localStorage.getItem(VEHICLE_KEY);
     if (saved) setVehicleId(saved);
   }, []);
@@ -54,6 +65,32 @@ export default function DriverPage() {
   const vehicle: VehicleWithSeats | undefined = state?.vehicles.find(
     (v) => v.id === vehicleId,
   );
+  const online = Boolean(vehicle?.active);
+
+  // iOS stops location updates when the screen locks, and the shuttle drops off the map.
+  useEffect(() => {
+    if (!online || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let stopped = false;
+    const acquire = async () => {
+      if (stopped || document.visibilityState !== "visible" || (lock && !lock.released)) return;
+      try {
+        const next = await navigator.wakeLock.request("screen");
+        if (stopped) void next.release();
+        else lock = next;
+      } catch {
+        // Not allowed right now (low battery, or the page is hidden); retried on the next visit.
+      }
+    };
+    void acquire();
+    // The browser drops the lock whenever the page is hidden.
+    document.addEventListener("visibilitychange", acquire);
+    return () => {
+      stopped = true;
+      document.removeEventListener("visibilitychange", acquire);
+      void lock?.release();
+    };
+  }, [online]);
 
   useEffect(() => {
     if (!state || vehicle || callsignSeeded.current) return;
@@ -135,6 +172,7 @@ export default function DriverPage() {
     return [...byDest.entries()].map(([destinationId, pax]) => ({ destinationId, pax }));
   }, [state, vehicleId]);
   const dropHere = atStop ? onboard.find((g) => g.destinationId === atStop.id) : undefined;
+  const onboardPax = onboard.reduce((n, g) => n + g.pax, 0);
 
   const draftPax = groups.reduce((n, g) => n + g.pax, 0);
   const room = vehicle ? vehicle.capacity - vehicle.seats.occupied : 0;
@@ -154,29 +192,49 @@ export default function DriverPage() {
 
   useEffect(() => {
     if (!vehicleId || !navigator.geolocation) return;
+    const onFix = (p: GeolocationPosition) => {
+      setGeoError(null);
+      const fix = {
+        lat: p.coords.latitude,
+        lng: p.coords.longitude,
+        accuracy: p.coords.accuracy,
+      };
+      setPos(fix);
+      lastFixRef.current = fix;
+      // Phones can emit several fixes a second; only report every 5s
+      // unless the driver just entered or left a stop.
+      const here =
+        stopsByDistance(stopsRef.current, fix).find((d) => d.atStop)?.stop.id ?? null;
+      const now = Date.now();
+      const last = lastPushRef.current;
+      if (now - last.at < 5000 && here === last.stopId) return;
+      lastPushRef.current = { at: now, stopId: here };
+      void pushLocation(fix.lat, fix.lng);
+    };
     const watchId = navigator.geolocation.watchPosition(
-      (p) => {
-        setGeoError(null);
-        const fix = {
-          lat: p.coords.latitude,
-          lng: p.coords.longitude,
-          accuracy: p.coords.accuracy,
-        };
-        setPos(fix);
-        // Phones can emit several fixes a second; only report every 5s
-        // unless the driver just entered or left a stop.
-        const here =
-          stopsByDistance(stopsRef.current, fix).find((d) => d.atStop)?.stop.id ?? null;
-        const now = Date.now();
-        const last = lastPushRef.current;
-        if (now - last.at < 5000 && here === last.stopId) return;
-        lastPushRef.current = { at: now, stopId: here };
-        void pushLocation(fix.lat, fix.lng);
+      onFix,
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) lastFixRef.current = null;
+        setGeoError(err.message || "Location unavailable");
       },
-      (err) => setGeoError(err.message || "Location unavailable"),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
     );
-    return () => navigator.geolocation.clearWatch(watchId);
+    // A parked phone stops sending fixes; check in with the last one so ground
+    // control doesn't take a waiting shuttle for a lost one.
+    const checkIn = () => {
+      const fix = lastFixRef.current;
+      if (!fix || document.visibilityState !== "visible") return;
+      if (Date.now() - lastPushRef.current.at < HEARTBEAT_MS) return;
+      lastPushRef.current = { ...lastPushRef.current, at: Date.now() };
+      void pushLocation(fix.lat, fix.lng);
+    };
+    const timer = setInterval(checkIn, 5_000);
+    document.addEventListener("visibilitychange", checkIn);
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", checkIn);
+    };
   }, [vehicleId, pushLocation]);
 
   async function register(e: React.FormEvent) {
@@ -202,17 +260,78 @@ export default function DriverPage() {
     }
   }
 
-  async function goOffline() {
+  async function goOffline(dropOff = false) {
     if (!vehicleId) return;
-    await fetch("/api/vehicles", {
+    setConfirmOffline(false);
+    const res = await fetch("/api/vehicles", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "active", vehicleId, active: false }),
+      body: JSON.stringify({ action: "active", vehicleId, active: false, dropOff }),
     });
+    if (!res.ok) {
+      // Riders boarded after this screen last refreshed: ask first.
+      const data = await res.json().catch(() => ({}));
+      setStatus(data.error || "Failed");
+      await refresh();
+      setConfirmOffline(true);
+      return;
+    }
+    forgetShuttle();
+    await refresh();
+  }
+
+  function forgetShuttle() {
     localStorage.removeItem(VEHICLE_KEY);
     setVehicleId(null);
     setGroups([]);
-    await refresh();
+  }
+
+  async function goOnline() {
+    if (!vehicleId) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/vehicles", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "active", vehicleId, active: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      setStatus(`${data.callsign} is online`);
+      if (pos) await pushLocation(pos.lat, pos.lng);
+      else await refresh();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function markNoShow(s: { destinationId: string; partyIds: string[] }) {
+    if (!vehicleId || !pickupStopId) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/board", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "no_show",
+          vehicleId,
+          stopId: pickupStopId,
+          partyIds: s.partyIds,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      setStatus(`No-show · ${data.seats} to ${stopName(state, s.destinationId)}`);
+      await refresh();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Failed");
+      await refresh();
+    } finally {
+      setNoShowKey(null);
+      setBusy(false);
+    }
   }
 
   async function setHeading(headingStopId: string) {
@@ -320,18 +439,6 @@ export default function DriverPage() {
         lastLedger = data.ledger;
         setGroups((prev) => prev.filter((x) => x.id !== g.id));
       }
-      // After pickup, bus is often heading toward the first group's destination
-      if (groups[0]?.destinationId) {
-        await fetch("/api/vehicles", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "heading",
-            vehicleId,
-            headingStopId: groups[0].destinationId,
-          }),
-        });
-      }
       setGroups([]);
       setStatus(
         `Picked up ${boarded} · ${lastLedger?.occupied}/${lastLedger?.capacity}`,
@@ -374,8 +481,12 @@ export default function DriverPage() {
     <main className="sb-shell">
       <AppHeader
         right={
-          vehicle ? (
-            <button type="button" className="sb-pill" onClick={() => void goOffline()}>
+          vehicle?.active ? (
+            <button
+              type="button"
+              className="sb-pill"
+              onClick={() => (onboardPax > 0 ? setConfirmOffline(true) : void goOffline())}
+            >
               Go offline
             </button>
           ) : undefined
@@ -433,18 +544,60 @@ export default function DriverPage() {
             </div>
           </form>
         )
+      ) : !vehicle.active ? (
+        <div className="sb-rise space-y-3">
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-foam px-4 py-3.5">
+            <span className="min-w-0 truncate font-semibold">{vehicle.callsign}</span>
+            <span className="text-sm font-semibold text-ink-soft">Offline</span>
+          </div>
+          <button
+            type="button"
+            className="sb-btn sb-btn-primary sb-btn-lg w-full"
+            disabled={busy}
+            onClick={() => void goOnline()}
+          >
+            Go online
+          </button>
+          <button type="button" className="sb-btn sb-btn-ghost w-full" onClick={forgetShuttle}>
+            New shuttle
+          </button>
+        </div>
       ) : (
         <div className="space-y-4">
-          <div className="sb-rise flex items-center justify-between rounded-xl bg-black px-4 py-3.5 text-white">
-            <span className="flex min-w-0 items-center gap-2.5 font-semibold">
-              <span className="sb-live-dot shrink-0" />
-              <span className="truncate">{vehicle.callsign}</span>
-            </span>
-            <span className="flex items-center gap-1.5 font-semibold tabular-nums">
-              <UsersIcon size={16} />
-              {vehicle.seats.occupied}/{vehicle.seats.capacity}
-            </span>
+          <div className="sb-rise rounded-xl bg-black px-4 py-3.5 text-white">
+            <div className="flex items-center justify-between">
+              <span className="flex min-w-0 items-center gap-2.5 font-semibold">
+                <span className="sb-live-dot shrink-0" />
+                <span className="truncate">{vehicle.callsign}</span>
+              </span>
+              <span className="flex items-center gap-1.5 font-semibold tabular-nums">
+                <UsersIcon size={16} />
+                {vehicle.seats.occupied}/{vehicle.seats.capacity}
+              </span>
+            </div>
+            <p className="mt-1 pl-5 text-xs text-white/60">Keep this screen open</p>
           </div>
+
+          {confirmOffline && onboardPax > 0 && (
+            <div className="sb-rise space-y-2 rounded-xl bg-foam p-3">
+              <p className="px-1 py-1 font-semibold">{onboardPax} still on board</p>
+              <button
+                type="button"
+                className="sb-btn sb-btn-primary w-full"
+                disabled={busy}
+                onClick={() => void goOffline(true)}
+              >
+                Drop off and go offline
+              </button>
+              <button
+                type="button"
+                className="sb-btn sb-btn-ghost w-full bg-white"
+                onClick={() => setConfirmOffline(false)}
+              >
+                Keep driving
+              </button>
+            </div>
+          )}
 
           {geoError ? (
             <p className="rounded-xl bg-amber-soft px-3.5 py-3 text-sm font-medium text-amber">
@@ -518,11 +671,16 @@ export default function DriverPage() {
                 const added = groups.some((g) =>
                   g.partyIds?.some((id) => s.partyIds.includes(id)),
                 );
+                const key = s.partyIds.join("-");
+                const confirming = noShowKey === key;
                 return (
-                  <li key={s.partyIds.join("-")}>
+                  <li
+                    key={key}
+                    className="flex items-center gap-2 border-b border-[var(--line)] last:border-b-0"
+                  >
                     <button
                       type="button"
-                      className="sb-row"
+                      className="sb-row min-w-0 flex-1 border-b-0"
                       disabled={added}
                       onClick={() => addSuggested(s)}
                     >
@@ -534,6 +692,16 @@ export default function DriverPage() {
                       </span>
                       <span className="sb-pill">{added ? "Added" : "Add"}</span>
                     </button>
+                    {!added && (
+                      <button
+                        type="button"
+                        className={`sb-btn shrink-0 px-3 text-sm ${confirming ? "sb-btn-primary" : "sb-btn-ghost"}`}
+                        disabled={busy}
+                        onClick={() => (confirming ? void markNoShow(s) : setNoShowKey(key))}
+                      >
+                        {confirming ? "Confirm" : "No-show"}
+                      </button>
+                    )}
                   </li>
                 );
               })}
