@@ -48,7 +48,7 @@ npm run dev          # http://127.0.0.1:43127
 
 ## Production
 
-The `Dockerfile` builds the Next.js standalone server (Node 24, multi-stage) and runs it as uid 1000 (`node`), listening on `$PORT`.
+The `Dockerfile` builds the Next.js standalone server (Node 22, multi-stage) and runs `node server.js` as uid 1000 (`node`), listening on `HOSTNAME:PORT` (`0.0.0.0:3000`). No secrets are baked in.
 
 ```bash
 docker build -t swingbus .
@@ -66,7 +66,8 @@ curl http://localhost:3000/api/health   # {"status":"ok",...}
 | `AUTH_SECRET` | derived in dev | **Required in production**, 32+ characters (`openssl rand -base64 32`). Signs session cookies. |
 | `PUBLIC_URL` | unset | Optional. Address printed QR codes point to, e.g. `https://swingbus.example.com`. Unset: the address ground control was opened at (`X-Forwarded-Host` / `X-Forwarded-Proto` first). Localhost is never used. |
 | `DATA_DIR` | `/data` in the image, `./data` otherwise | Directory that holds `store.json`. |
-| `PORT` | `3000` in the image | The image always binds `0.0.0.0`. |
+| `PORT` | `3000` in the image | Listen port. |
+| `HOSTNAME` | `0.0.0.0` in the image | Bind address. Kubernetes overwrites it with the pod name, so set `HOSTNAME=0.0.0.0` in the pod spec. |
 
 Production means any `next build` output: `npm start`, `node server.js`, the image. It exits at boot with `Refusing to start in production: …` unless the three secrets are set and the passwords aren't the public defaults; sign-in and sessions are refused as well. Only `npm run dev` uses the defaults.
 

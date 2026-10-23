@@ -1,10 +1,12 @@
-# swingbus production image: Next.js standalone server, non-root, listens on $PORT.
+# swingbus production image: Next.js standalone server, run as non-root with `node server.js`.
+# Its runtime contract is shared with the production deploy image; change both together:
+# PORT, HOSTNAME=0.0.0.0, DATA_DIR, GET /api/health, Node 22, no baked-in secrets.
 #   docker build -t swingbus .
 # Running it needs DRIVER_PASSWORD, ADMIN_PASSWORD, AUTH_SECRET and a volume
 # at /data; PUBLIC_URL (address printed QR codes use) is optional.
 # See README.md → Production.
 
-FROM node:24-alpine AS base
+FROM node:22-alpine AS base
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -18,8 +20,10 @@ COPY . .
 RUN npm run build
 
 FROM base AS runner
+# Kubernetes overwrites HOSTNAME with the pod name, so pod specs must set HOSTNAME=0.0.0.0 as well.
 ENV NODE_ENV=production \
     PORT=3000 \
+    HOSTNAME=0.0.0.0 \
     DATA_DIR=/data
 # App files stay root-owned (read-only to the server); only /data is writable.
 COPY --from=builder /app/public ./public
@@ -31,6 +35,4 @@ USER 1000:1000
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["node", "-e", "fetch(`http://127.0.0.1:${process.env.PORT}/api/health`).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
-# Runtimes may set HOSTNAME to the container/pod name, which would make Next
-# bind only that address; always listen on all interfaces.
-CMD ["sh", "-c", "HOSTNAME=0.0.0.0 exec node server.js"]
+CMD ["node", "server.js"]
