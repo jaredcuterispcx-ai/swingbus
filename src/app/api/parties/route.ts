@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
       partySize: Number(body.partySize ?? 1),
       note: body.note ? String(body.note) : undefined,
       contactHint: body.contactHint ? String(body.contactHint) : undefined,
+      heldCancelToken: req.cookies.get(RIDE_COOKIE)?.value,
     });
     const res = NextResponse.json(publicRide(party), { status: 201 });
     res.cookies.set(RIDE_COOKIE, cancelToken, rideCookieOptions(req));

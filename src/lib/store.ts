@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { allocateCallsign, normalizeCallsign, takenCallsigns } from "./callsigns";
 import { refreshGroundControl } from "./dispatch";
 import { stopAt } from "./geo";
-import { hashCancelToken, newCancelToken } from "./ride-token";
+import { hashCancelToken, newCancelToken, rideForToken } from "./ride-token";
 import { seatLedger } from "./seats";
 import { DEFAULT_STOPS } from "./stops";
 import type {
@@ -202,8 +202,15 @@ export async function createParty(input: {
   partySize: number;
   note?: string;
   contactHint?: string;
+  /** The cancel token this phone already holds; a phone gets one open request at a time. */
+  heldCancelToken?: string;
 }): Promise<{ party: PassengerParty; cancelToken: string }> {
   return withWrite(async (state) => {
+    const held = rideForToken(state.parties, input.heldCancelToken);
+    if (held && ["waiting", "cleared", "boarding"].includes(held.status)) {
+      const from = state.stops.find((s) => s.id === held.stopId)?.name ?? "another stop";
+      throw new RideError(409, `You already have a ride from ${from}. Cancel it first.`);
+    }
     if (!state.stops.some((s) => s.id === input.stopId)) {
       throw new Error("Unknown pickup stand");
     }
