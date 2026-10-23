@@ -1,10 +1,10 @@
 # Ground control model (airport metaphor)
 
-Swing Bus treats campus shuttles like ground vehicles under a tower.
+swingbus treats campus shuttles like ground vehicles under a tower.
 
 ## Actors
 
-| Real world | Swing Bus | Notes |
+| Real world | swingbus | Notes |
 | --- | --- | --- |
 | Gate / stand | **Stop / stand** | QR at the curb |
 | Passenger group | **Party** | Requests *seats* (party size), not just a ping |

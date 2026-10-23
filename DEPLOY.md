@@ -1,4 +1,4 @@
-# Swing Bus — deployment guide
+# swingbus — deployment guide
 
 Next.js 15 app for xAI employees. Product model (seats / clearances / stands): see `docs/GROUND-CONTROL.md`.
 
@@ -35,7 +35,7 @@ The agent egress allowlist **does** mention patterns that match an xAI-like corp
 | `tunnel.cloudproxy.app`, `*.cloudflare.com` | Cloudflare Tunnel path is network-plausible |
 | `*.tailscale.com` | Tailscale exists for corp devices — **not** for personal phones in this design |
 
-Treat the table as **hints for where to ask infra**, not as proof of an existing Swing Bus service.
+Treat the table as **hints for where to ask infra**, not as proof of an existing swingbus service.
 
 ---
 
@@ -51,7 +51,7 @@ Public edge (corp ingress or Cloudflare Tunnel hostname)
 Internal network (mouseion / int-x.ai / cluster)
         │
         ▼
-Swing Bus pod/container  ←── image from internal registry
+swingbus pod/container  ←── image from internal registry
         (this Dockerfile, port 3000)
 ```
 
@@ -77,7 +77,7 @@ Swing Bus pod/container  ←── image from internal registry
 You already use Tailscale for corp devices. **Funnel** (not Serve) is the feature that exposes a local port to the **public internet** so personal phones do **not** need the Tailscale app:
 
 ```bash
-# on an internal host that is on the xAI tailnet, after Swing Bus is listening:
+# on an internal host that is on the xAI tailnet, after swingbus is listening:
 npm run build && npm start          # or: docker compose up --build
 tailscale funnel 43127              # use 3000 if running the Docker image
 ```
@@ -106,7 +106,7 @@ Admin prerequisites (one-time, Tailscale admin console): MagicDNS + HTTPS certs 
 ### 4) Reverse proxy + optional SSO on an existing edge
 
 - Same container; nginx/Envoy/oauth2-proxy (or corp API gateway) terminates TLS and optionally enforces Okta.
-- Useful if Swing Bus must sit behind the same SSO as other employee web tools.
+- Useful if swingbus must sit behind the same SSO as other employee web tools.
 
 **Pros:** Familiar security model.  
 **Cons:** Still needs an approved public VIP/hostname from networking.
@@ -149,7 +149,7 @@ This agent already runs the app at a local port for UI review. Cursor cloud VMs 
 
 **Suggested ask to infra (copy/paste):**
 
-> We need a small Next.js (standalone Docker) app “Swing Bus” running on internal compute (mouseion / int-x.ai cluster preferred), with a **stable HTTPS URL reachable from personal phones without Tailscale**. Prefer corp public ingress, a tagged Tailscale Funnel node, or Cloudflare Tunnel to the internal Service. Optional Okta/`auth.x.ai` gate. Image build is in-repo (`Dockerfile`).
+> We need a small Next.js (standalone Docker) app “swingbus” running on internal compute (mouseion / int-x.ai cluster preferred), with a **stable HTTPS URL reachable from personal phones without Tailscale**. Prefer corp public ingress, a tagged Tailscale Funnel node, or Cloudflare Tunnel to the internal Service. Optional Okta/`auth.x.ai` gate. Image build is in-repo (`Dockerfile`).
 
 ---
 

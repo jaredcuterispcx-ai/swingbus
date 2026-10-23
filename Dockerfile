@@ -1,4 +1,4 @@
-# Swing Bus — production Next.js standalone image
+# swingbus — production Next.js standalone image
 # Requires next.config.ts: output: "standalone"
 
 FROM node:20-alpine AS base
