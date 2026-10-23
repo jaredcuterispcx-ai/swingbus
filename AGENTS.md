@@ -58,7 +58,9 @@ Key modules (`src/lib/`):
 
 API routes (`src/app/api/`): `state` (GET, DELETE = reset riders/fleet but keep stops), `parties`, `vehicles` (register / location / heading / active / accept_clearance), `board` (board + alight), `stops` (CRUD + `restore_defaults`), `dispatch`, `demo/seed`. Legacy aliases: `requests`, `drivers`, `pickups`.
 
-Pages: `/` home, `/passenger/[stopId]`, `/driver`, `/dispatch` (ground control), `/admin`, `/stops` (printable QR codes), `/deploy` (phone-access notes).
+Pages: `/` home, `/passenger/[stopId]`, `/driver`, `/dispatch` (ground control), `/dispatch/qr` + `/dispatch/qr/driver` (printable stop and driver QR codes; `/stops` redirects there), `/admin`, `/deploy` (phone-access notes).
+
+QR codes take their base from the page's Public URL field, else `PUBLIC_URL`, else the address ground control opened the page at (`X-Forwarded-Host` / `-Proto` before `Host`). Loopback addresses are always refused (`src/lib/public-url.ts`). Print styles are the `sb-qr-*` classes in `globals.css`: `@page` margin 0 so Chrome prints no URL/date header, each `.sb-qr-page` is one sheet.
 
 ## Stops
 
