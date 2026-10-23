@@ -66,7 +66,7 @@ Nine stops from the "MEM Shuttle Info" sheet: Food Trucks / War Room, Crossroads
 
 Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 PM. Dispatcher phone: (956) 658-1860.
 
-**Coordinates are approximate placeholders** (geocoding was blocked in the build environment). ETAs and "next shuttle" ranking are only rough until real pins are entered in `/admin`.
+**Coordinates**: Macroharder West/East (west and east ends of the building at 2400 Stateline Rd W, Southaven), Duke (control building at the former Duke Energy plant, 2875 Stanton Rd S), Gun Range (8325 Tulane Rd) and Southland Mall (north lot by the main entrance) are pinned at the pickup spot from public map data. Food Trucks / War Room, Crossroads, Church Parking Lot and Spam / Nexus are still placeholders (marked in `src/lib/stops.ts`) because no public source places them; ETAs and "next shuttle" ranking for those stay rough until real pins are entered in `/admin`. An existing `data/store.json` keeps its stops until someone edits them or uses "Restore MEM shuttle sheet stops" in `/admin`.
 
 ## Running
 
@@ -82,7 +82,7 @@ Phones off the corporate network: run on a stable internal host and expose it wi
 
 ## Open items
 
-- Real lat/lng for every stop (product owner offered to provide them).
+- Real lat/lng for Food Trucks / War Room, Crossroads, Church Parking Lot and Spam / Nexus (product owner offered to provide them).
 - Use the onsite/offsite tags: only offer offsite stops in service windows; tag shuttles as onsite vs offsite.
 - Durable hosting (internal host + Funnel, or a managed host). `data/store.json` needs a persistent volume wherever it runs.
 - Auth is shared passwords only (no per-person accounts or audit trail); default passwords live in source, so set env overrides in production.
