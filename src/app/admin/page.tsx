@@ -37,10 +37,22 @@ function toDraft(stop?: Stop): Draft {
   };
 }
 
-/** Accepts "35.0012, -90.0145" pasted into either coordinate field. */
+/** With a hemisphere letter, the letter alone sets the sign (S and W are negative). */
+function signed(value: string, hemisphere: string | undefined, negative: "S" | "W"): string {
+  if (!hemisphere) return value;
+  const abs = value.replace(/^-/, "");
+  return hemisphere.toUpperCase() === negative ? `-${abs}` : abs;
+}
+
+/**
+ * Accepts "35.0012, -90.0145" or Apple Maps' "35.0012° N, 90.0145° W"
+ * pasted into either coordinate field.
+ */
 function splitPair(value: string): [string, string] | null {
-  const m = value.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
-  return m ? [m[1], m[2]] : null;
+  const m = value.match(
+    /^\s*(-?\d+(?:\.\d+)?)\s*°?\s*([NS])?\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*°?\s*([EW])?\s*$/i,
+  );
+  return m ? [signed(m[1], m[2], "S"), signed(m[3], m[4], "W")] : null;
 }
 
 export default function AdminPage() {
