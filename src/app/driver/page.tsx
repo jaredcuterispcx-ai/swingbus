@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { PinIcon, UsersIcon } from "@/components/icons";
+import { ClosedStopsNote } from "@/components/service-hours";
 import { SignOutButton } from "@/components/sign-out";
 import { randomElectricCallsign } from "@/lib/callsigns";
 import { formatDistance, stopsByDistance } from "@/lib/geo";
+import { statusOf } from "@/lib/service-hours";
 import type { VehicleWithSeats } from "@/lib/use-app-state";
 import { stopName, useAppState } from "@/lib/use-app-state";
 
@@ -84,7 +86,8 @@ export default function DriverPage() {
 
   const optionLabel = (s: { id: string; name: string }) => {
     const m = distanceTo(s.id);
-    return m == null ? s.name : `${s.name} · ${formatDistance(m)}`;
+    const label = m == null ? s.name : `${s.name} · ${formatDistance(m)}`;
+    return statusOf(state, s.id).open ? label : `${label} · Closed`;
   };
 
   useEffect(() => {
@@ -467,6 +470,7 @@ export default function DriverPage() {
           ) : (
             <p className="text-sm text-ink-soft">Finding GPS…</p>
           )}
+          <ClosedStopsNote state={state} />
 
           {dropHere && (
             <button

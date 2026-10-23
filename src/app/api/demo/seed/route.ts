@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serviceStatus } from "@/lib/service-hours";
 import {
   createParty,
   getState,
@@ -8,6 +9,18 @@ import {
 } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
+
+const DEMO_RIDERS = [
+  {
+    stopId: "food-trucks-war-room",
+    destinationId: "macroharder-east",
+    partySize: 4,
+    note: "lunch run",
+  },
+  { stopId: "crossroads", destinationId: "duke", partySize: 2 },
+  { stopId: "southland-mall", destinationId: "macroharder-west", partySize: 3 },
+  { stopId: "church-lot", destinationId: "macroharder-east", partySize: 6 },
+];
 
 /** Seed a realistic ground-control scenario for demos. */
 export async function POST() {
@@ -28,27 +41,17 @@ export async function POST() {
     lng: -90.033,
   });
 
-  await createParty({
-    stopId: "food-trucks-war-room",
-    destinationId: "macroharder-east",
-    partySize: 4,
-    note: "lunch run",
-  });
-  await createParty({
-    stopId: "crossroads",
-    destinationId: "duke",
-    partySize: 2,
-  });
-  await createParty({
-    stopId: "southland-mall",
-    destinationId: "macroharder-west",
-    partySize: 3,
-  });
-  await createParty({
-    stopId: "church-lot",
-    destinationId: "macroharder-east",
-    partySize: 6,
-  });
+  // Riders can't request offsite lots outside their service hours.
+  const { stops } = await getState();
+  const inService = (id: string) => {
+    const stop = stops.find((s) => s.id === id);
+    return !stop || serviceStatus(stop).open;
+  };
+  for (const rider of DEMO_RIDERS) {
+    if (inService(rider.stopId) && inService(rider.destinationId)) {
+      await createParty(rider);
+    }
+  }
 
   const state = await getState();
   return NextResponse.json({

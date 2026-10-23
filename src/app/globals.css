@@ -250,6 +250,16 @@ select {
   background: var(--foam);
 }
 
+/* Shown but not offered, e.g. a stop outside its service hours */
+.sb-row-off {
+  cursor: default;
+  color: var(--ink-soft);
+}
+
+.sb-row-off:active {
+  background: transparent;
+}
+
 .sb-mode-row {
   display: flex;
   align-items: center;

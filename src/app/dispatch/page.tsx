@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { AppHeader } from "@/components/app-header";
 import { MiniMap } from "@/components/mini-map";
+import { ServiceHoursPanel } from "@/components/service-hours";
 import { SignOutButton } from "@/components/sign-out";
 import { stopName, useAppState, type VehicleWithSeats } from "@/lib/use-app-state";
 
@@ -137,6 +138,8 @@ export default function GroundControlPage() {
           </div>
         )}
       </section>
+
+      <ServiceHoursPanel state={state} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <section className="sb-panel sb-rise sb-rise-delay-1">

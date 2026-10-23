@@ -5,6 +5,7 @@ import { allocateCallsign, normalizeCallsign, takenCallsigns } from "./callsigns
 import { refreshGroundControl } from "./dispatch";
 import { stopAt } from "./geo";
 import { seatLedger } from "./seats";
+import { assertInService } from "./service-hours";
 import { DEFAULT_STOPS } from "./stops";
 import type {
   AppState,
@@ -202,6 +203,9 @@ export async function createParty(input: {
     }
     if (input.stopId === input.destinationId) {
       throw new Error("Destination must differ from pickup stand");
+    }
+    for (const id of [input.stopId, input.destinationId]) {
+      assertInService(state.stops.find((s) => s.id === id)!);
     }
     const partySize = Math.min(12, Math.max(1, Math.floor(input.partySize)));
     const now = new Date().toISOString();

@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/app-header";
-import { ChevronIcon, PinIcon } from "@/components/icons";
+import { ChevronIcon, ClockIcon, PinIcon } from "@/components/icons";
 import { SignOutButton } from "@/components/sign-out";
 import { DEFAULT_ARRIVAL_RADIUS_M } from "@/lib/geo";
+import { hoursLabel, stopWindows } from "@/lib/service-hours";
 import { serviceLabel } from "@/lib/stops";
 import type { Stop, StopService } from "@/lib/types";
 
@@ -330,6 +331,7 @@ function StopEditor({
     }
   }
 
+  const hoursFor = { service: draft.service || undefined };
   const latNum = Number(draft.lat);
   const lngNum = Number(draft.lng);
   const hasCoords =
@@ -397,6 +399,11 @@ function StopEditor({
             </button>
           ))}
         </div>
+        <p className="flex items-center gap-1.5 pt-1 text-xs text-ink-soft">
+          <ClockIcon size={14} />
+          {hoursLabel(hoursFor)}
+          {stopWindows(hoursFor) ? " Memphis time" : ""}
+        </p>
       </fieldset>
 
       <div className="space-y-2">
