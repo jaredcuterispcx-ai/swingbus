@@ -16,16 +16,16 @@ export async function POST() {
   const v1 = await registerVehicle({ callsign: "Green-1", capacity: 14 });
   const v2 = await registerVehicle({ callsign: "Blue-2", capacity: 10 });
 
-  // Approximate Macroharder / Stateline corridor
+  // Stateline Rd W outside Macroharder, clear of every stop's arrival radius
   await updateVehicleLocation({
     vehicleId: v1.id,
-    lat: 35.0016,
-    lng: -90.0135,
+    lat: 34.99185,
+    lng: -90.038,
   });
   await updateVehicleLocation({
     vehicleId: v2.id,
-    lat: 35.0021,
-    lng: -90.0118,
+    lat: 34.99183,
+    lng: -90.033,
   });
 
   await createParty({

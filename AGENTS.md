@@ -67,7 +67,7 @@ Nine stops from the "MEM Shuttle Info" sheet: Food Trucks / War Room, Crossroads
 
 Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 PM. Dispatcher phone: (956) 658-1860.
 
-**Coordinates are approximate placeholders** (geocoding was blocked in the build environment). ETAs and "next shuttle" ranking are only rough until real pins are entered in `/admin`.
+**Coordinates**: Macroharder West/East (west and east ends of the building at 2400 Stateline Rd W, Southaven), Duke (control building at the former Duke Energy plant, 2875 Stanton Rd S), Gun Range (8325 Tulane Rd) and Southland Mall (north lot by the main entrance) are pinned at the pickup spot from public map data. Food Trucks / War Room, Crossroads, Church Parking Lot and Spam / Nexus are still placeholders (marked in `src/lib/stops.ts`) because no public source places them; ETAs and "next shuttle" ranking for those stay rough until real pins are entered in `/admin`. An existing `data/store.json` keeps its stops until someone edits them or uses "Restore MEM shuttle sheet stops" in `/admin`.
 
 ## Running
 
@@ -94,7 +94,7 @@ Phones reach swingbus over a public HTTPS hostname (driver GPS needs HTTPS). Tai
 
 ## Open items
 
-- Real lat/lng for every stop (product owner offered to provide them).
+- Real lat/lng for Food Trucks / War Room, Crossroads, Church Parking Lot and Spam / Nexus (product owner offered to provide them).
 - Use the onsite/offsite tags: only offer offsite stops in service windows; tag shuttles as onsite vs offsite.
 - Durable hosting: the image is ready (see Running and `DEPLOY.md`); the xAI host, public hostname and secrets are being set up outside this repo. Wherever it runs: one instance and a persistent volume at `/data`.
 - Auth is shared passwords only (no per-person accounts or audit trail). Production refuses to run on the public defaults.
