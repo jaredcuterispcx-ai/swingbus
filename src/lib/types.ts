@@ -3,6 +3,9 @@ export type StopId = string;
 /** Which MEM shuttle services pick up at this stand. */
 export type StopService = "onsite" | "offsite" | "both";
 
+/** The service a shuttle runs, picked by its driver at sign-in. */
+export type ShuttleService = Exclude<StopService, "both">;
+
 export interface Stop {
   id: StopId;
   name: string;
@@ -57,6 +60,7 @@ export interface Vehicle {
   id: string;
   callsign: string;
   capacity: number;
+  service: ShuttleService;
   occupied: number;
   status: VehicleStatus;
   lat: number | null;

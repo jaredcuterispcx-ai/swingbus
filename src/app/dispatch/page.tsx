@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/app-header";
 import { MiniMap } from "@/components/mini-map";
 import { ServiceHoursPanel } from "@/components/service-hours";
 import { SignOutButton } from "@/components/sign-out";
+import { serviceLabel } from "@/lib/stops";
 import { stopName, useAppState, type VehicleWithSeats } from "@/lib/use-app-state";
 
 export default function GroundControlPage() {
@@ -109,7 +110,7 @@ export default function GroundControlPage() {
                 <div className="flex items-baseline justify-between gap-2">
                   <h3 className="font-semibold">{v.callsign}</h3>
                   <span className="text-xs uppercase tracking-wide text-leaf">
-                    {v.status}
+                    {serviceLabel(v.service)} · {v.status}
                   </span>
                 </div>
                 <p className="sb-brand mt-1 text-3xl tabular-nums text-ink">

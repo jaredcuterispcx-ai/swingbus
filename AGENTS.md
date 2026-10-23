@@ -49,11 +49,11 @@ Key modules (`src/lib/`):
 |------|------|
 | `types.ts` | Stop, PassengerParty, Vehicle, Clearance, BoardingEvent, AppState |
 | `store.ts` | Persistence, migrations (`SCHEMA_VERSION`), all mutations incl. stop CRUD |
-| `dispatch.ts` | Ground-control routing: issues clearances (seat holds) to the nearest vehicle with room |
+| `dispatch.ts` | Ground-control routing: issues clearances (seat holds) to the nearest vehicle with room that runs the trip's service |
 | `seats.ts` | Seat ledger: `available = capacity − occupied − reserved` |
-| `fleet.ts` | Per-stop ranking of shuttles + ETA (haversine, ~22 km/h) for the waiting view |
+| `fleet.ts` | Per-stop ranking of the shuttles that could take the rider + ETA (haversine, ~22 km/h) for the waiting view |
 | `geo.ts` | Distances, arrival radius, nearest stop |
-| `service-hours.ts` | Service hours per stop tag (Memphis time): open/closed, next opening; riders can't request closed stops |
+| `service-hours.ts` | Service hours per stop tag (Memphis time): open/closed, next opening; riders can't request closed stops. Also which shuttle service a trip needs (`tripService`) |
 | `callsigns.ts` | Electric callsign generation + uniqueness |
 | `stops.ts` | Default MEM stop list (seed only; admin edits are the source of truth after that) |
 
@@ -63,7 +63,7 @@ Pages: `/` home, `/passenger/[stopId]`, `/driver`, `/dispatch` (ground control),
 
 ## Stops
 
-Nine stops from the "MEM Shuttle Info" sheet: Food Trucks / War Room, Crossroads, Macroharder West, Macroharder East, Church Parking Lot (Surge Concierge / Onboarding), Southland Mall Parking Lot, Duke, Gun Range, Spam / Nexus. Each is tagged onsite / offsite / both.
+Nine stops from the "MEM Shuttle Info" sheet: Food Trucks / War Room, Crossroads, Macroharder West, Macroharder East, Church Parking Lot (Surge Concierge / Onboarding), Southland Mall Parking Lot, Duke, Gun Range, Spam / Nexus. Each is tagged onsite / offsite / both. Drivers pick their shuttle's service (onsite or offsite) when they start a session, and ground control only clears a shuttle for trips its service runs: a trip to or from Church Parking Lot or Southland Mall needs the offsite shuttle, any other trip with an onsite-only stop needs the onsite shuttle, and Crossroads ↔ Macroharder East can take either. Riders only see ETAs from shuttles that could take them. Vehicles saved before tagging load as onsite.
 
 Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 PM. Dispatcher phone: (956) 658-1860. The hours are enforced from `SERVICE_HOURS` in `src/lib/service-hours.ts`, always in America/Chicago whatever the server or phone timezone: offsite-only stops can't be requested as pickup or destination outside their windows (passengers see "Opens 5 PM"; drivers and ground control see them as closed), while "both" and untagged stops run 24/7. Hours are config, not per stop; per-stop hours would need a new stop field, a `SCHEMA_VERSION` bump, and an admin editor. The server decides open or closed and sends it in `GET /api/state`; clients only format it.
 

@@ -1,5 +1,6 @@
 import { haversineKm } from "./dispatch";
 import { seatLedger } from "./seats";
+import { runsTrip, servesStop } from "./service-hours";
 import type { AppState, Stop, Vehicle } from "./types";
 
 const AVG_SHUTTLE_KMH = 22;
@@ -27,13 +28,18 @@ export type ShuttleArrival = {
   reason: string;
 };
 
-/** All active shuttles ranked for a passenger waiting at `stopId`. */
+/**
+ * Active shuttles that could take a rider from `stopId`, ranked: those that run
+ * the trip once the destination is known, otherwise those that serve the stop.
+ */
 export function shuttlesForStop(
   state: AppState,
   stopId: string,
+  destinationId?: string | null,
 ): ShuttleArrival[] {
   const stop = stopById(state.stops, stopId);
   if (!stop) return [];
+  const destination = stopById(state.stops, destinationId);
 
   const comingIds = new Set(
     state.clearances
@@ -48,7 +54,14 @@ export function shuttlesForStop(
   );
 
   const rows: ShuttleArrival[] = state.vehicles
-    .filter((v) => v.active)
+    .filter(
+      (v) =>
+        v.active &&
+        (comingIds.has(v.id) ||
+          (destination
+            ? runsTrip(v.service, stop, destination)
+            : servesStop(v.service, stop))),
+    )
     .map((v) => {
       const seats = seatLedger(state, v);
       const pos = vehiclePosition(v, state.stops);
