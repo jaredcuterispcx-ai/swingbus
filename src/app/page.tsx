@@ -6,6 +6,7 @@ import { BoltGlyph, Wordmark } from "@/components/brand";
 import { ChevronIcon, PinIcon, SearchIcon } from "@/components/icons";
 import { MiniMap } from "@/components/mini-map";
 import { nextShuttleForStop } from "@/lib/fleet";
+import { opensLabel, statusOf } from "@/lib/service-hours";
 import { useAppState } from "@/lib/use-app-state";
 
 export default function HomePage() {
@@ -19,6 +20,8 @@ export default function HomePage() {
       .filter((s) => !q || s.name.toLowerCase().includes(q) || s.shortCode.toLowerCase() === q)
       .map((stop) => ({ stop, next: nextShuttleForStop(state, stop.id) }));
   }, [state, query]);
+  const offered = rows.filter(({ stop }) => statusOf(state, stop.id).open);
+  const closed = rows.filter(({ stop }) => !statusOf(state, stop.id).open);
 
   const online = state?.vehicles.filter((v) => v.active).length ?? 0;
 
@@ -62,7 +65,7 @@ export default function HomePage() {
       {error && <p className="py-4 text-sm text-danger">{error}</p>}
 
       <ul>
-        {rows.map(({ stop, next }) => (
+        {offered.map(({ stop, next }) => (
           <li key={stop.id}>
             <Link href={`/passenger/${stop.id}`} className="sb-row">
               <span className="sb-icon-btn size-10">
@@ -76,6 +79,19 @@ export default function HomePage() {
                 <ChevronIcon />
               </span>
             </Link>
+          </li>
+        ))}
+        {closed.map(({ stop }) => (
+          <li key={stop.id}>
+            <div className="sb-row sb-row-off" aria-disabled="true">
+              <span className="sb-icon-btn size-10">
+                <PinIcon />
+              </span>
+              <span className="min-w-0 flex-1 truncate font-semibold">{stop.name}</span>
+              <span className="shrink-0 text-sm font-semibold">
+                {opensLabel(statusOf(state, stop.id))}
+              </span>
+            </div>
           </li>
         ))}
         {state && rows.length === 0 && (

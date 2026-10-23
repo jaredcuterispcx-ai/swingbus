@@ -53,10 +53,11 @@ Key modules (`src/lib/`):
 | `seats.ts` | Seat ledger: `available = capacity − occupied − reserved` |
 | `fleet.ts` | Per-stop ranking of shuttles + ETA (haversine, ~22 km/h) for the waiting view |
 | `geo.ts` | Distances, arrival radius, nearest stop |
+| `service-hours.ts` | Service hours per stop tag (Memphis time): open/closed, next opening; riders can't request closed stops |
 | `callsigns.ts` | Electric callsign generation + uniqueness |
 | `stops.ts` | Default MEM stop list (seed only; admin edits are the source of truth after that) |
 
-API routes (`src/app/api/`): `state` (GET, DELETE = reset riders/fleet but keep stops), `parties`, `vehicles` (register / location / heading / active / accept_clearance), `board` (board + alight), `stops` (CRUD + `restore_defaults`), `dispatch`, `demo/seed`. Legacy aliases: `requests`, `drivers`, `pickups`.
+API routes (`src/app/api/`): `state` (GET incl. per-stop `serviceStatus`, DELETE = reset riders/fleet but keep stops), `parties`, `vehicles` (register / location / heading / active / accept_clearance), `board` (board + alight), `stops` (CRUD + `restore_defaults`), `dispatch`, `demo/seed`. Legacy aliases: `requests`, `drivers`, `pickups`.
 
 Pages: `/` home, `/passenger/[stopId]`, `/driver`, `/dispatch` (ground control), `/admin`, `/stops` (printable QR codes), `/deploy` (phone-access notes).
 
@@ -66,6 +67,8 @@ Nine stops from the "MEM Shuttle Info" sheet: Food Trucks / War Room, Crossroads
 
 Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 PM. Dispatcher phone: (956) 658-1860.
 
+Those hours are enforced from `SERVICE_HOURS` in `src/lib/service-hours.ts`, always in America/Chicago whatever the server or phone timezone. Offsite-only stops can't be requested as pickup or destination outside their windows (passengers see "Opens 5 PM"; drivers and ground control see them as closed). "Both" and untagged stops run 24/7. Hours are config, not per stop: per-stop hours would need a new stop field, a `SCHEMA_VERSION` bump, and an admin editor. The server decides open/closed and sends it in `GET /api/state`; clients only format it.
+
 **Coordinates are approximate placeholders** (geocoding was blocked in the build environment). ETAs and "next shuttle" ranking are only rough until real pins are entered in `/admin`.
 
 ## Running
@@ -74,6 +77,7 @@ Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 
 npm install
 npm run dev                  # http://127.0.0.1:43127
 ./scripts/dev-forever.sh     # same, auto-restarts if the server exits
+npm test                     # service-hours tests (Node ≥ 22.18 runs .ts directly)
 ```
 
 Cursor setup: `.cursor/rules/swingbus.mdc` is always applied (naming, design, engineering rules). `.cursor/environment.json` runs `npm ci` at build time and `scripts/cloud-start.sh` on boot, which keeps the dev server up in the `swingbus-dev` tmux session (log: `/tmp/swingbus-dev.log`). Add `DRIVER_PASSWORD`, `ADMIN_PASSWORD`, `AUTH_SECRET` as Cloud Agent secrets.
@@ -83,7 +87,7 @@ Phones off the corporate network: run on a stable internal host and expose it wi
 ## Open items
 
 - Real lat/lng for every stop (product owner offered to provide them).
-- Use the onsite/offsite tags: only offer offsite stops in service windows; tag shuttles as onsite vs offsite.
+- Tag shuttles as onsite vs offsite (stop service hours already use the stop tags).
 - Durable hosting (internal host + Funnel, or a managed host). `data/store.json` needs a persistent volume wherever it runs.
 - Auth is shared passwords only (no per-person accounts or audit trail); default passwords live in source, so set env overrides in production.
 - GitHub (`jaredcuterispcx-ai/swingbus`): the original build environment had no write credentials, so `main` there may still be just the initial README commit. Branch `cursor/github-main-db12` holds this code merged onto that initial commit (unrelated histories already joined) and can be pushed straight to `main`.
