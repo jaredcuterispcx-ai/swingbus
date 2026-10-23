@@ -38,7 +38,7 @@ Name is always lowercase, even at the start of a sentence: **swingbus** (never "
 
 ## Architecture
 
-- Next.js 15 App Router + TypeScript + Tailwind v4. No database: state lives in `store.json` under `DATA_DIR` (default `data/`, gitignored; `/data` in the container), written through a serialized write chain in `src/lib/store.ts`. `persist()` writes a temp file and renames it over `store.json`, so a crash never leaves a half-written store. Missing file → built-in defaults; unreadable file → requests fail and the file is left alone, never reseeded over.
+- Next.js 15 App Router + TypeScript + Tailwind v4. No database: state lives in `store.json` under `DATA_DIR` (default `data/`, gitignored; `/data` in the container), written through a serialized write chain in `src/lib/store.ts`. `persist()` writes a temp file and renames it over `store.json`, so a crash never leaves a half-written store. Missing file → built-in defaults; unreadable file → requests fail and the file is left alone, never reseeded over. `src/lib/backups.ts` (started by `src/instrumentation.ts`) keeps a dated daily copy beside it (`store.json.YYYY-MM-DD`, newest `BACKUP_DAYS`, default 14). The app must run as **exactly one process**: the state is one file behind an in-process lock, so no horizontal scaling and no serverless.
 - Clients poll `GET /api/state` (2–8 s depending on page).
 - Fonts are bundled via `@fontsource-variable/*`. Do **not** switch back to `next/font/google`: it downloads at boot and failing downloads took the whole app down.
 - Custom CSS classes (`sb-*`) live in `@layer components`, base resets in `@layer base`, so Tailwind utilities can override them. Unlayered rules beat utilities — that bug once hid button labels.
@@ -49,6 +49,7 @@ Key modules (`src/lib/`):
 |------|------|
 | `types.ts` | Stop, PassengerParty, Vehicle, Clearance, BoardingEvent, AppState |
 | `store.ts` | Persistence, migrations (`SCHEMA_VERSION`), all mutations incl. stop CRUD |
+| `backups.ts` | Dated daily copies of `store.json` in `DATA_DIR`, pruned to `BACKUP_DAYS` |
 | `dispatch.ts` | Ground-control routing: issues clearances (seat holds) to the nearest vehicle with room |
 | `seats.ts` | Seat ledger: `available = capacity − occupied − reserved` |
 | `fleet.ts` | Per-stop ranking of shuttles + ETA (haversine, ~22 km/h) for the waiting view |
@@ -85,7 +86,7 @@ docker run -p 3000:3000 -v swingbus-data:/data \
   -e PUBLIC_URL=https://swingbus.example.com swingbus
 ```
 
-Multi-stage `Dockerfile` (Node 22 alpine → Next standalone): runs `node server.js` as uid 1000 with `PORT=3000`, `HOSTNAME=0.0.0.0` (Kubernetes overwrites HOSTNAME with the pod name, so pod specs must set it too) and `DATA_DIR=/data` (mount a persistent volume there, writable by uid 1000). That runtime contract (PORT, HOSTNAME, DATA_DIR, `/api/health`, non-root `node server.js`, Node 22, no baked-in secrets) must stay identical to the production deploy image. `DRIVER_PASSWORD`, `ADMIN_PASSWORD` and `AUTH_SECRET` are required; `PUBLIC_URL` is optional and pins the address printed QR codes point to (unset: the address ground control was opened at). `GET /api/health` (public, read-only: it must never call `getState()`, which can write) returns 200 when the data dir is writable and `store.json` parses or doesn't exist yet, else 503; the image's `HEALTHCHECK` uses it. Run exactly one instance: state is a single file. `docker-compose.yml` is a local smoke run of the same image. Without Docker: `npm ci && npm run build`, then `npm start` with the secrets set.
+Multi-stage `Dockerfile` (Node 22 alpine → Next standalone): runs `node server.js` as uid 1000 with `PORT=3000`, `HOSTNAME=0.0.0.0` (Kubernetes overwrites HOSTNAME with the pod name, so pod specs must set it too) and `DATA_DIR=/data` (mount a persistent volume there as a directory, never `store.json` alone, writable by uid 1000). That runtime contract (PORT, HOSTNAME, DATA_DIR, `/api/health`, non-root `node server.js`, Node 22, no baked-in secrets) must stay identical to the production deploy image. `DRIVER_PASSWORD`, `ADMIN_PASSWORD` and `AUTH_SECRET` are required; `PUBLIC_URL` (pins the address printed QR codes point to; unset: the address ground control was opened at) and `BACKUP_DAYS` are optional. `GET /api/health` (public, read-only: it must never call `getState()`, which can write) returns 200 when the data dir is writable and `store.json` parses or doesn't exist yet, else 503; the image's `HEALTHCHECK` uses it. Run exactly one process: no extra replicas, no serverless, no multi-process managers. `docker-compose.yml` is a local smoke run of the same image. Without Docker: `npm ci && npm run build`, then `npm start` with the secrets set.
 
 Cursor setup: `.cursor/rules/swingbus.mdc` is always applied (naming, design, engineering rules). `.cursor/environment.json` runs `npm ci` at build time and `scripts/cloud-start.sh` on boot, which keeps the dev server up in the `swingbus-dev` tmux session (log: `/tmp/swingbus-dev.log`). Add `DRIVER_PASSWORD`, `ADMIN_PASSWORD`, `AUTH_SECRET` as Cloud Agent secrets.
 

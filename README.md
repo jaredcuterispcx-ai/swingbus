@@ -65,13 +65,18 @@ curl http://localhost:3000/api/health   # {"status":"ok",...}
 | `ADMIN_PASSWORD` | `swingbus-admin` in dev | **Required in production.** Must differ from the driver password. |
 | `AUTH_SECRET` | derived in dev | **Required in production**, 32+ characters (`openssl rand -base64 32`). Signs session cookies. |
 | `PUBLIC_URL` | unset | Optional. Address printed QR codes point to, e.g. `https://swingbus.example.com`. Unset: the address ground control was opened at (`X-Forwarded-Host` / `X-Forwarded-Proto` first). Localhost is never used. |
-| `DATA_DIR` | `/data` in the image, `./data` otherwise | Directory that holds `store.json`. |
+| `DATA_DIR` | `/data` in the image, `./data` otherwise | Directory that holds `store.json` and its daily copies. |
+| `BACKUP_DAYS` | `14` | Daily copies of `store.json` to keep (`store.json.YYYY-MM-DD`, UTC date). `0` turns them off. |
 | `PORT` | `3000` in the image | Listen port. |
 | `HOSTNAME` | `0.0.0.0` in the image | Bind address. Kubernetes overwrites it with the pod name, so set `HOSTNAME=0.0.0.0` in the pod spec. |
 
 Production means any `next build` output: `npm start`, `node server.js`, the image. It exits at boot with `Refusing to start in production: …` unless the three secrets are set and the passwords aren't the public defaults; sign-in and sessions are refused as well. Only `npm run dev` uses the defaults.
 
-**Volume.** Mount persistent storage at `/data` (or wherever `DATA_DIR` points), writable by uid 1000. `store.json` holds stops (including admin edits), riders, and shuttles. Each write goes to a temp file that is then renamed over `store.json`, so a crash mid-write leaves the previous version intact. A missing file starts from the built-in stops. An unreadable file is never overwritten: requests fail and `/api/health` returns 503 until it's repaired or moved aside (moving it aside reseeds the built-in stops). State is a single file: run one instance, and stop the old one before starting its replacement.
+**Volume.** Mount a persistent volume as a directory at `/data` (or wherever `DATA_DIR` points), writable by uid 1000. Don't mount `store.json` as a single file: each write goes to a temp file in the same directory and is renamed over `store.json`, which can't replace a separately mounted file (`/api/health` reports it). `store.json` holds stops (including admin edits), riders, and shuttles, and a crash mid-write leaves the previous version intact. A missing file starts from the built-in stops. An unreadable file is never overwritten: requests fail and `/api/health` returns 503 until it's repaired or moved aside (moving it aside reseeds the built-in stops).
+
+**Backups.** At boot and then hourly, the app copies `store.json` to `store.json.YYYY-MM-DD` (UTC date) in the same directory, once a day, and keeps the newest `BACKUP_DAYS` (14). A store that doesn't parse is never copied. To restore, stop the app, copy a dated file over `store.json`, and start it again. The copies share the volume, so they cover a bad edit or an accidental "Restore defaults", not a lost volume: snapshot the volume as well if the platform can.
+
+**One process.** State is one file behind an in-process write lock, so swingbus must run as exactly one process. That rules out horizontal scaling (more than one replica), serverless platforms, and multi-process managers. Stop the old instance before starting its replacement.
 
 **Health.** `GET /api/health` (public, read-only) returns 200 `{"status":"ok","store":"ok",…}` when the secrets are set, `DATA_DIR` is writable, and `store.json` parses or doesn't exist yet (`"store":"new"`); otherwise 503. `"store":"new"` after a restart means the volume didn't persist. Point readiness and liveness probes at it; the image's `HEALTHCHECK` uses it.
 
@@ -84,7 +89,7 @@ DRIVER_PASSWORD='…' ADMIN_PASSWORD='…' AUTH_SECRET='…' npm start
 
 `docker compose up --build` runs the image on port 3000 with a named volume; it reads the three secrets (and `PUBLIC_URL`, if set) from your shell or a gitignored `.env`.
 
-Hosting rules for any platform (one replica, public HTTPS, no tunnels): [DEPLOY.md](DEPLOY.md).
+Hosting rules for any platform (one process, public HTTPS, no tunnels): [DEPLOY.md](DEPLOY.md).
 
 ## API
 

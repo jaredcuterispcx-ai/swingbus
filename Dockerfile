@@ -3,8 +3,9 @@
 # PORT, HOSTNAME=0.0.0.0, DATA_DIR, GET /api/health, Node 22, no baked-in secrets.
 #   docker build -t swingbus .
 # Running it needs DRIVER_PASSWORD, ADMIN_PASSWORD, AUTH_SECRET and a volume
-# at /data; PUBLIC_URL (address printed QR codes use) is optional.
-# See README.md → Production.
+# mounted as a directory at /data; PUBLIC_URL (address printed QR codes use)
+# and BACKUP_DAYS (daily copies kept, default 14) are optional. Run exactly one
+# container: the state is one file. See README.md → Production.
 
 FROM node:22-alpine AS base
 WORKDIR /app
