@@ -2,7 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import { authConfigProblem } from "@/lib/auth";
-import { DATA_DIR } from "@/lib/store";
+import { DATA_DIR, STORE_PATH } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +23,21 @@ async function assertWritable(dir: string): Promise<void> {
   }
 }
 
+/** store.json's contents, or null when it doesn't exist yet. */
+async function readStoreFile(): Promise<string | null> {
+  try {
+    const [dir, file] = await Promise.all([fs.stat(DATA_DIR), fs.stat(STORE_PATH)]);
+    // Writes rename a temp file over store.json, which fails when the file is mounted on its own.
+    if (dir.dev !== file.dev) {
+      throw new Error(`${STORE_PATH} is mounted on its own; mount ${DATA_DIR} as a directory`);
+    }
+    return await fs.readFile(STORE_PATH, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+}
+
 /**
  * Container probe. Read-only: it never goes through getState(), which can write.
  * 200 when auth is configured, DATA_DIR is writable, and store.json parses or
@@ -32,20 +47,15 @@ export async function GET() {
   if (authConfigProblem()) return unhealthy("auth not configured");
   try {
     await assertWritable(DATA_DIR);
-    let stops: number | null = null;
-    try {
-      const raw = JSON.parse(await fs.readFile(path.join(DATA_DIR, "store.json"), "utf8"));
-      stops = Array.isArray(raw?.stops) ? raw.stops.length : 0;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    const text = await readStoreFile();
+    let store: { store: "new" } | { store: "ok"; stops: number } = { store: "new" };
+    if (text !== null) {
+      const raw = JSON.parse(text);
+      if (!raw || typeof raw !== "object") throw new Error(`${STORE_PATH} is not a JSON object`);
+      store = { store: "ok", stops: Array.isArray(raw.stops) ? raw.stops.length : 0 };
     }
     return NextResponse.json(
-      {
-        status: "ok",
-        store: stops === null ? "new" : "ok",
-        ...(stops === null ? {} : { stops }),
-        uptimeSeconds: Math.round(process.uptime()),
-      },
+      { status: "ok", ...store, uptimeSeconds: Math.round(process.uptime()) },
       { headers: noStore },
     );
   } catch (err) {
