@@ -47,6 +47,10 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${outfit.variable} ${mono.variable} antialiased`}>
         {children}
+        <footer className="mx-auto max-w-[480px] px-5 pt-2 pb-8 text-center text-[11px] leading-relaxed text-ink-soft/60">
+          Swingbus brought to you by your friends in Transportation and
+          Observability Software.
+        </footer>
       </body>
     </html>
   );
