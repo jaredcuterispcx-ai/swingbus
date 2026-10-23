@@ -397,44 +397,60 @@ export async function boardParties(input: {
     }
 
     const now = new Date().toISOString();
+    const isOpen = (p: PassengerParty) =>
+      p.status === "waiting" || p.status === "cleared" || p.status === "boarding";
     let partyIds = input.partyIds ?? [];
     let seats = input.seats ?? 0;
     let parties = state.parties;
 
-    if (partyIds.length === 0) {
-      const candidates = state.parties.filter(
-        (p) =>
-          p.stopId === input.stopId &&
-          (p.status === "waiting" ||
-            p.status === "cleared" ||
-            p.status === "boarding") &&
-          (!p.vehicleId || p.vehicleId === input.vehicleId) &&
-          (!input.destinationId || p.destinationId === input.destinationId),
-      );
-      if (candidates.length > 0) {
+    if (partyIds.length > 0) {
+      // Seats come from riders still waiting, so resending a group can't double count.
+      const requested = new Set(partyIds);
+      const boarding = state.parties.filter((p) => requested.has(p.id) && isOpen(p));
+      if (boarding.length === 0) throw new Error("Those riders are no longer waiting");
+      partyIds = boarding.map((p) => p.id);
+      seats = boarding.reduce((n, p) => n + p.partySize, 0);
+    } else {
+      const candidates = state.parties
+        .filter(
+          (p) =>
+            p.stopId === input.stopId &&
+            isOpen(p) &&
+            (!p.vehicleId || p.vehicleId === input.vehicleId) &&
+            (!input.destinationId || p.destinationId === input.destinationId),
+        )
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      if (!seats) {
         partyIds = candidates.map((c) => c.id);
         seats = candidates.reduce((n, c) => n + c.partySize, 0);
-      } else if (input.destinationId && (input.seats ?? 0) > 0) {
-        // Driver-logged group: pax count + destination at this stop.
-        const manual: PassengerParty = {
-          id: randomUUID(),
-          stopId: input.stopId,
-          destinationId: input.destinationId,
-          partySize: Math.max(1, Math.floor(input.seats!)),
-          status: "boarding",
-          vehicleId: input.vehicleId,
-          clearanceId: null,
-          createdAt: now,
-          updatedAt: now,
-        };
-        parties = [...state.parties, manual];
-        partyIds = [manual.id];
-        seats = manual.partySize;
+      } else {
+        // Driver-logged group: their head count is what boarded. Waiting requests
+        // for the same trip that fit inside it are picked up; the rest are walk-ups.
+        seats = Math.floor(seats);
+        const picked: string[] = [];
+        let walkUps = seats;
+        for (const c of candidates) {
+          if (c.partySize > walkUps) continue;
+          picked.push(c.id);
+          walkUps -= c.partySize;
+        }
+        if (walkUps > 0 && input.destinationId) {
+          const manual: PassengerParty = {
+            id: randomUUID(),
+            stopId: input.stopId,
+            destinationId: input.destinationId,
+            partySize: walkUps,
+            status: "boarding",
+            vehicleId: input.vehicleId,
+            clearanceId: null,
+            createdAt: now,
+            updatedAt: now,
+          };
+          parties = [...state.parties, manual];
+          picked.push(manual.id);
+        }
+        partyIds = picked;
       }
-    } else if (!seats) {
-      seats = state.parties
-        .filter((p) => partyIds.includes(p.id))
-        .reduce((n, p) => n + p.partySize, 0);
     }
 
     seats = Math.max(1, seats);
@@ -539,8 +555,18 @@ export async function alight(input: {
     const idx = state.vehicles.findIndex((v) => v.id === input.vehicleId);
     if (idx < 0) throw new Error("Unknown vehicle");
     const now = new Date().toISOString();
-    const drop = Math.max(0, Math.floor(input.seats));
     const vehicle = state.vehicles[idx];
+    const toDest = input.destinationId
+      ? state.parties.filter(
+          (p) =>
+            p.vehicleId === input.vehicleId &&
+            p.status === "onboard" &&
+            p.destinationId === input.destinationId,
+        )
+      : [];
+    const drop = toDest.length
+      ? toDest.reduce((n, p) => n + p.partySize, 0)
+      : Math.max(0, Math.floor(input.seats));
     const occupied = Math.max(0, vehicle.occupied - drop);
 
     const parties = state.parties.map((p) => {
@@ -556,7 +582,7 @@ export async function alight(input: {
 
     // If destination filter, only mark matching; else mark enough by size
     let remaining = drop;
-    const adjusted = parties.map((p) => {
+    const adjusted = state.parties.map((p) => {
       if (
         !input.destinationId &&
         p.vehicleId === input.vehicleId &&
@@ -572,7 +598,11 @@ export async function alight(input: {
     const event: BoardingEvent = {
       id: randomUUID(),
       vehicleId: input.vehicleId,
-      stopId: vehicle.currentStopId ?? state.stops[0]?.id ?? "food-trucks-war-room",
+      stopId:
+        input.destinationId ??
+        vehicle.currentStopId ??
+        state.stops[0]?.id ??
+        "food-trucks-war-room",
       destinationId:
         input.destinationId ??
         vehicle.currentStopId ??
