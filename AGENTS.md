@@ -108,3 +108,4 @@ Phones reach swingbus over a public HTTPS hostname (driver GPS needs HTTPS). Tai
 - Deleting a stop is refused while riders reference it, and at least 2 stops must remain.
 - `npm start`, `node server.js` and the image are production builds: they exit at boot without `DRIVER_PASSWORD`, `ADMIN_PASSWORD`, `AUTH_SECRET`. Use `npm run dev` locally.
 - Don't keep `data/` out of the standalone build with `outputFileTracingExcludes: { "*": [...] }`: Next applies `*` to its own server trace as a substring match and drops `next/dist/lib/metadata/*`, so the server can't boot. `.dockerignore` already keeps `data/` out of images.
+- Don't bind Next to an IP such as `127.0.0.1` (`HOSTNAME`, `-H`): Next 15 then makes the login redirect an absolute `http://localhost:<port>/login`, even behind proxy headers, which breaks phones behind any proxy or tunnel. Bind to `0.0.0.0` (the repo and image default) or `localhost` (which may listen on `::1` only).
