@@ -233,9 +233,25 @@ function StopEditor({
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
 
   function setCoord(field: "lat" | "lng", value: string) {
+    set({ [field]: value });
+  }
+
+  function trySplit(value: string): boolean {
     const pair = splitPair(value);
     if (pair) set({ lat: pair[0], lng: pair[1] });
-    else set({ [field]: value });
+    return Boolean(pair);
+  }
+
+  function coordHandlers(field: "lat" | "lng") {
+    return {
+      onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCoord(field, e.target.value),
+      onPaste: (e: React.ClipboardEvent<HTMLInputElement>) => {
+        if (trySplit(e.clipboardData.getData("text"))) e.preventDefault();
+      },
+      onBlur: (e: React.FocusEvent<HTMLInputElement>) => {
+        trySplit(e.target.value);
+      },
+    };
   }
 
   function useMyLocation() {
@@ -393,7 +409,7 @@ function StopEditor({
               required
               inputMode="decimal"
               value={draft.lat}
-              onChange={(e) => setCoord("lat", e.target.value)}
+              {...coordHandlers("lat")}
               placeholder="35.0012"
             />
           </label>
@@ -404,7 +420,7 @@ function StopEditor({
               required
               inputMode="decimal"
               value={draft.lng}
-              onChange={(e) => setCoord("lng", e.target.value)}
+              {...coordHandlers("lng")}
               placeholder="-90.0145"
             />
           </label>
