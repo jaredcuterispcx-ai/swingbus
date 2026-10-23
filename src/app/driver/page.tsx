@@ -36,6 +36,7 @@ export default function DriverPage() {
   /** Last stop we auto-selected for; a manual pick sticks until the next arrival. */
   const lastArrivalRef = useRef<string | null>(null);
   const lastPushRef = useRef<{ at: number; stopId: string | null }>({ at: 0, stopId: null });
+  const callsignSeeded = useRef(false);
   const stopsRef = useRef(state?.stops ?? []);
   stopsRef.current = state?.stops ?? stopsRef.current;
 
@@ -50,14 +51,15 @@ export default function DriverPage() {
     if (saved) setVehicleId(saved);
   }, []);
 
-  useEffect(() => {
-    if (vehicleId || !state || callsign) return;
-    setCallsign(randomElectricCallsign(state.vehicles));
-  }, [state, vehicleId, callsign]);
-
   const vehicle: VehicleWithSeats | undefined = state?.vehicles.find(
     (v) => v.id === vehicleId,
   );
+
+  useEffect(() => {
+    if (!state || vehicle || callsignSeeded.current) return;
+    callsignSeeded.current = true;
+    setCallsign(randomElectricCallsign(state.vehicles));
+  }, [state, vehicle]);
 
   useEffect(() => {
     setGroups([]);
@@ -194,11 +196,7 @@ export default function DriverPage() {
       setStatus(`${data.callsign} is online`);
       await refresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed";
-      setStatus(msg);
-      if (/already on duty/i.test(msg)) {
-        setCallsign(randomElectricCallsign(state?.vehicles ?? []));
-      }
+      setStatus(err instanceof Error ? err.message : "Failed");
     } finally {
       setBusy(false);
     }

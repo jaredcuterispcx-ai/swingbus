@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
-import { normalizeCallsign } from "./callsigns";
+import { allocateCallsign, normalizeCallsign, takenCallsigns } from "./callsigns";
 import { refreshGroundControl } from "./dispatch";
 import { stopAt } from "./geo";
 import { seatLedger } from "./seats";
@@ -224,17 +224,11 @@ export async function registerVehicle(input: {
   capacity?: number;
 }): Promise<Vehicle> {
   return withWrite(async (state) => {
-    const callsign = normalizeCallsign(input.callsign).slice(0, 32);
-    if (!callsign) throw new Error("Callsign / shuttle label is required");
-    const key = callsign.toLowerCase();
-    const duplicate = state.vehicles.find(
-      (v) => v.active && normalizeCallsign(v.callsign).toLowerCase() === key,
-    );
-    if (duplicate) {
-      throw new Error(
-        `Callsign “${duplicate.callsign}” is already on duty — pick another`,
-      );
-    }
+    const requested = normalizeCallsign(input.callsign).slice(0, 32);
+    if (!requested) throw new Error("Callsign / shuttle label is required");
+    const callsign = takenCallsigns(state.vehicles).has(requested.toLowerCase())
+      ? allocateCallsign(requested, state.vehicles)
+      : requested;
     const now = new Date().toISOString();
     const vehicle: Vehicle = {
       id: randomUUID(),
