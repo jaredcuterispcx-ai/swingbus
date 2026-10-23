@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { activeClearances, seatLedger } from "@/lib/seats";
+import { serviceStatusByStop } from "@/lib/service-hours";
 import { getState, resetDemo } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,7 @@ export async function GET() {
     ...state,
     vehicles,
     activeClearances: activeClearances(state),
+    serviceStatus: serviceStatusByStop(state.stops),
   });
 }
 

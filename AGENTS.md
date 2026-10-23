@@ -53,10 +53,11 @@ Key modules (`src/lib/`):
 | `seats.ts` | Seat ledger: `available = capacity − occupied − reserved` |
 | `fleet.ts` | Per-stop ranking of shuttles + ETA (haversine, ~22 km/h) for the waiting view |
 | `geo.ts` | Distances, arrival radius, nearest stop |
+| `service-hours.ts` | Service hours per stop tag (Memphis time): open/closed, next opening; riders can't request closed stops |
 | `callsigns.ts` | Electric callsign generation + uniqueness |
 | `stops.ts` | Default MEM stop list (seed only; admin edits are the source of truth after that) |
 
-API routes (`src/app/api/`): `state` (GET, DELETE = reset riders/fleet but keep stops), `parties`, `vehicles` (register / location / heading / active / accept_clearance), `board` (board + alight), `stops` (CRUD + `restore_defaults`), `dispatch`, `demo/seed`. Legacy aliases: `requests`, `drivers`, `pickups`.
+API routes (`src/app/api/`): `state` (GET incl. per-stop `serviceStatus`, DELETE = reset riders/fleet but keep stops), `parties`, `vehicles` (register / location / heading / active / accept_clearance), `board` (board + alight), `stops` (CRUD + `restore_defaults`), `dispatch`, `demo/seed`. Legacy aliases: `requests`, `drivers`, `pickups`.
 
 Pages: `/` home, `/passenger/[stopId]`, `/driver`, `/dispatch` (ground control), `/admin`, `/stops` (printable QR codes), `/deploy` (phone-access notes).
 
@@ -64,7 +65,7 @@ Pages: `/` home, `/passenger/[stopId]`, `/driver`, `/dispatch` (ground control),
 
 Nine stops from the "MEM Shuttle Info" sheet: Food Trucks / War Room, Crossroads, Macroharder West, Macroharder East, Church Parking Lot (Surge Concierge / Onboarding), Southland Mall Parking Lot, Duke, Gun Range, Spam / Nexus. Each is tagged onsite / offsite / both.
 
-Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 PM. Dispatcher phone: (956) 658-1860.
+Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 PM. Dispatcher phone: (956) 658-1860. The hours are enforced from `SERVICE_HOURS` in `src/lib/service-hours.ts`, always in America/Chicago whatever the server or phone timezone: offsite-only stops can't be requested as pickup or destination outside their windows (passengers see "Opens 5 PM"; drivers and ground control see them as closed), while "both" and untagged stops run 24/7. Hours are config, not per stop; per-stop hours would need a new stop field, a `SCHEMA_VERSION` bump, and an admin editor. The server decides open or closed and sends it in `GET /api/state`; clients only format it.
 
 **Coordinates are approximate placeholders** (geocoding was blocked in the build environment). ETAs and "next shuttle" ranking are only rough until real pins are entered in `/admin`.
 
@@ -74,6 +75,7 @@ Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 
 npm install
 npm run dev                  # http://127.0.0.1:43127
 ./scripts/dev-forever.sh     # same, auto-restarts if the server exits
+npm test                     # service-hours tests (Node ≥ 22.18 runs .ts directly)
 ```
 
 Cursor setup: `.cursor/rules/swingbus.mdc` is always applied (naming, design, engineering rules). `.cursor/environment.json` runs `npm ci` at build time and `scripts/cloud-start.sh` on boot, which keeps the dev server up in the `swingbus-dev` tmux session (log: `/tmp/swingbus-dev.log`). Add `DRIVER_PASSWORD`, `ADMIN_PASSWORD`, `AUTH_SECRET` as Cloud Agent secrets.

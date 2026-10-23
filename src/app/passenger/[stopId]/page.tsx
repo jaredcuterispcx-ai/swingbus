@@ -5,9 +5,11 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { BoltGlyph } from "@/components/brand";
-import { ChevronIcon, PinIcon, TripDots, UsersIcon } from "@/components/icons";
+import { ChevronIcon, ClockIcon, PinIcon, TripDots, UsersIcon } from "@/components/icons";
 import { MiniMap } from "@/components/mini-map";
 import { shuttlesForStop } from "@/lib/fleet";
+import { hoursLabel, opensLabel, statusOf } from "@/lib/service-hours";
+import { serviceLabel } from "@/lib/stops";
 import { stopName, useAppState } from "@/lib/use-app-state";
 
 const PARTY_KEY = "swingbus.partyId";
@@ -199,7 +201,41 @@ export default function PassengerStopPage() {
     );
   }
 
-  const dest = destinations.find((d) => d.id === destinationId);
+  const pickupStatus = statusOf(state, stopId);
+  if (!pickupStatus.open) {
+    return (
+      <main className="sb-shell">
+        <AppHeader />
+        <MiniMap
+          stops={state?.stops ?? []}
+          vehicles={(state?.vehicles ?? []).filter((v) => v.active)}
+          pickupId={stopId}
+          height={200}
+        />
+
+        <section className="sb-rise mt-5">
+          <p className="sb-brand text-3xl">{opensLabel(pickupStatus)}</p>
+          <p className="mt-0.5 truncate text-ink-soft">{stop.name} is closed</p>
+
+          <div className="mt-5 flex items-center gap-3 rounded-xl bg-foam p-3.5">
+            <ClockIcon />
+            <span className="min-w-0 flex-1 truncate font-semibold">
+              {serviceLabel(stop.service) || "Shuttle"} hours
+            </span>
+            <span className="shrink-0 text-sm font-semibold">{hoursLabel(stop)}</span>
+          </div>
+
+          <Link href="/" className="sb-btn sb-btn-primary sb-btn-lg mt-6 w-full">
+            Choose another stop
+          </Link>
+        </section>
+      </main>
+    );
+  }
+
+  const offered = destinations.filter((s) => statusOf(state, s.id).open);
+  const closed = destinations.filter((s) => !statusOf(state, s.id).open);
+  const dest = offered.find((d) => d.id === destinationId);
 
   return (
     <main className="sb-shell flex flex-col">
@@ -225,7 +261,7 @@ export default function PassengerStopPage() {
 
       {!dest ? (
         <ul className="sb-rise">
-          {destinations.map((s) => (
+          {offered.map((s) => (
             <li key={s.id}>
               <button type="button" className="sb-row" onClick={() => setDestinationId(s.id)}>
                 <span className="sb-icon-btn size-10">
@@ -236,6 +272,19 @@ export default function PassengerStopPage() {
                   <ChevronIcon />
                 </span>
               </button>
+            </li>
+          ))}
+          {closed.map((s) => (
+            <li key={s.id}>
+              <div className="sb-row sb-row-off" aria-disabled="true">
+                <span className="sb-icon-btn size-10">
+                  <PinIcon />
+                </span>
+                <span className="min-w-0 flex-1 truncate font-semibold">{s.name}</span>
+                <span className="shrink-0 text-sm font-semibold">
+                  {opensLabel(statusOf(state, s.id))}
+                </span>
+              </div>
             </li>
           ))}
         </ul>

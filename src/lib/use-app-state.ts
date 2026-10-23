@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { AppState, SeatLedger, Vehicle } from "./types";
+import type { StopServiceStatus } from "./service-hours";
+import type { AppState, SeatLedger, StopId, Vehicle } from "./types";
 
 export type VehicleWithSeats = Vehicle & { seats: SeatLedger };
 
 export type ClientState = Omit<AppState, "vehicles"> & {
   vehicles: VehicleWithSeats[];
   activeClearances?: AppState["clearances"];
+  /** Open or closed right now, by the server's clock. */
+  serviceStatus: Record<StopId, StopServiceStatus>;
 };
 
 export function useAppState(pollMs = 3000) {
