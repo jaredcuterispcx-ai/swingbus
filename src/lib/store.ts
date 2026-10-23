@@ -109,30 +109,40 @@ function pruneOrphanParties(state: AppState): AppState {
 
 async function ensureStore(): Promise<AppState> {
   await fs.mkdir(DATA_DIR, { recursive: true });
+  let text: string;
   try {
-    const raw = JSON.parse(await fs.readFile(STORE_PATH, "utf8")) as Record<
-      string,
-      unknown
-    >;
-    const migrated = raw.schemaVersion !== SCHEMA_VERSION;
-    let state = migrate(raw);
-    state.schemaVersion = SCHEMA_VERSION;
-    const before = state.parties.length;
-    state = pruneOrphanParties(state);
-    if (migrated || state.parties.length !== before) {
-      await persist(state);
-    }
-    return state;
-  } catch {
+    text = await fs.readFile(STORE_PATH, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     const state = emptyState();
-    await fs.writeFile(STORE_PATH, JSON.stringify(state, null, 2));
+    await persist(state);
     return state;
   }
+  // An unreadable store is an error, not a fresh start: reseeding would
+  // overwrite admin-edited stops with the defaults.
+  const raw = JSON.parse(text) as Record<string, unknown>;
+  const migrated = raw.schemaVersion !== SCHEMA_VERSION;
+  let state = migrate(raw);
+  state.schemaVersion = SCHEMA_VERSION;
+  const before = state.parties.length;
+  state = pruneOrphanParties(state);
+  if (migrated || state.parties.length !== before) {
+    await persist(state);
+  }
+  return state;
 }
 
 async function persist(state: AppState) {
   await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(STORE_PATH, JSON.stringify(state, null, 2));
+  // Write-then-rename so a crash mid-write can't leave a truncated store.
+  const tmp = `${STORE_PATH}.${process.pid}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(state, null, 2));
+  await fs.rename(tmp, STORE_PATH);
+}
+
+/** refreshGroundControl restamps updatedAt on every call; that alone isn't worth a write. */
+function withoutTimestamps(state: AppState): string {
+  return JSON.stringify(state, (key, value) => (key === "updatedAt" ? undefined : value));
 }
 
 function withWrite<T>(fn: (state: AppState) => Promise<T> | T): Promise<T> {
@@ -150,7 +160,7 @@ function withWrite<T>(fn: (state: AppState) => Promise<T> | T): Promise<T> {
 export async function getState(): Promise<AppState> {
   return withWrite(async (state) => {
     const next = refreshGroundControl(state);
-    if (JSON.stringify(next) !== JSON.stringify(state)) {
+    if (withoutTimestamps(next) !== withoutTimestamps(state)) {
       await persist(next);
     }
     return next;
