@@ -86,3 +86,11 @@ Phones off the corporate network: run on a stable internal host and expose it wi
 - Use the onsite/offsite tags: only offer offsite stops in service windows; tag shuttles as onsite vs offsite.
 - Durable hosting (internal host + Funnel, or a managed host). `data/store.json` needs a persistent volume wherever it runs.
 - Auth is shared passwords only (no per-person accounts or audit trail); default passwords live in source, so set env overrides in production.
+- GitHub (`jaredcuterispcx-ai/swingbus`): the original build environment had no write credentials, so `main` there may still be just the initial README commit. Branch `cursor/github-main-db12` holds this code merged onto that initial commit (unrelated histories already joined) and can be pushed straight to `main`.
+- Driver GPS flow on the current UI needs one more real-phone check: start a session at a stop, confirm the location chip shows "Here" and pickup auto-selects that stop, then move and confirm it updates.
+
+## Gotchas
+
+- Restart the dev server with `pkill -f next-server` (the `dev-forever.sh` loop brings it back); Ctrl-C in its tmux pane kills the loop.
+- Admin lat/lng inputs split a pasted "lat, lng" pair only on paste or blur — never in `onChange`, or typing gets mangled.
+- Deleting a stop is refused while riders reference it, and at least 2 stops must remain.
