@@ -8,10 +8,13 @@ import { SignOutButton } from "@/components/sign-out";
 import { randomElectricCallsign } from "@/lib/callsigns";
 import { formatDistance, stopsByDistance } from "@/lib/geo";
 import { statusOf } from "@/lib/service-hours";
+import { serviceLabel } from "@/lib/stops";
+import type { ShuttleService } from "@/lib/types";
 import type { VehicleWithSeats } from "@/lib/use-app-state";
 import { stopName, useAppState } from "@/lib/use-app-state";
 
 const VEHICLE_KEY = "swingbus.vehicleId";
+const SHUTTLE_SERVICES: ShuttleService[] = ["onsite", "offsite"];
 
 type PickupGroup = {
   id: string;
@@ -25,6 +28,7 @@ export default function DriverPage() {
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [callsign, setCallsign] = useState("");
   const [capacity, setCapacity] = useState(14);
+  const [service, setService] = useState<ShuttleService>("onsite");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
@@ -190,7 +194,7 @@ export default function DriverPage() {
       const res = await fetch("/api/vehicles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ callsign, capacity }),
+        body: JSON.stringify({ callsign, capacity, service }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
@@ -423,6 +427,20 @@ export default function DriverPage() {
               <Stepper value={capacity} min={4} max={40} onChange={setCapacity} />
             </div>
 
+            <div className="mt-5 grid w-full grid-cols-2 gap-2" role="group" aria-label="Service">
+              {SHUTTLE_SERVICES.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  aria-pressed={service === s}
+                  className={`sb-seg ${service === s ? "sb-seg-on" : ""}`}
+                  onClick={() => setService(s)}
+                >
+                  {serviceLabel(s)}
+                </button>
+              ))}
+            </div>
+
             <button
               type="submit"
               disabled={busy || !callsign.trim()}
@@ -442,6 +460,9 @@ export default function DriverPage() {
             <span className="flex min-w-0 items-center gap-2.5 font-semibold">
               <span className="sb-live-dot shrink-0" />
               <span className="truncate">{vehicle.callsign}</span>
+              <span className="shrink-0 text-sm font-medium text-white/70">
+                {serviceLabel(vehicle.service)}
+              </span>
             </span>
             <span className="flex items-center gap-1.5 font-semibold tabular-nums">
               <UsersIcon size={16} />

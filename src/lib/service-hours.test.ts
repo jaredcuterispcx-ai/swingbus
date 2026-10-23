@@ -5,7 +5,10 @@ import {
   clockLabel,
   hoursLabel,
   opensLabel,
+  runsTrip,
+  servesStop,
   serviceStatus,
+  tripService,
   windowLabel,
 } from "./service-hours.ts";
 
@@ -86,6 +89,34 @@ test("labels", () => {
   assert.equal(clockLabel("2026-10-23T10:30:00Z"), "5:30 AM");
   assert.equal(opensLabel(serviceStatus(offsite, new Date("2026-10-23T15:00:00Z"))), "Opens 5 PM");
   assert.equal(opensLabel(serviceStatus(offsite, new Date("2026-10-24T03:00:00Z"))), "Opens 5 AM");
+});
+
+test("which shuttle runs a trip", () => {
+  const onsite = { service: "onsite" as const };
+  const lot = { service: "offsite" as const };
+  const both = { service: "both" as const };
+  const untagged = {};
+  // [pickup, destination, service the trip needs]
+  const trips: [object, object, "onsite" | "offsite" | null][] = [
+    [onsite, onsite, "onsite"], // Duke → Gun Range
+    [onsite, both, "onsite"], // Duke → Crossroads
+    [untagged, both, "onsite"],
+    [both, both, null], // Crossroads → Macroharder East
+    [both, lot, "offsite"], // Crossroads → Southland Mall
+    [lot, lot, "offsite"], // Church Lot → Southland Mall
+    [lot, onsite, "offsite"], // Southland Mall → Duke
+    [onsite, lot, "offsite"], // Duke → Church Lot
+  ];
+  for (const [pickup, destination, needed] of trips) {
+    assert.equal(tripService(pickup, destination), needed);
+    assert.equal(tripService(destination, pickup), needed);
+    assert.equal(runsTrip("onsite", pickup, destination), needed !== "offsite");
+    assert.equal(runsTrip("offsite", pickup, destination), needed !== "onsite");
+  }
+  assert.equal(servesStop("onsite", lot), false);
+  assert.equal(servesStop("onsite", both), true);
+  assert.equal(servesStop("offsite", both), true);
+  assert.equal(servesStop("offsite", untagged), false);
 });
 
 test("riders can't request a closed stop", () => {

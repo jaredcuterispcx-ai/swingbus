@@ -41,10 +41,10 @@ export default function PassengerStopPage() {
       (p.status === "waiting" || p.status === "cleared" || p.status === "boarding"),
   );
   const waiting = Boolean(myParty && myParty.stopId === stopId);
-
+  const tripTo = waiting ? myParty?.destinationId : destinationId;
   const fleet = useMemo(
-    () => (state && stopId ? shuttlesForStop(state, stopId) : []),
-    [state, stopId],
+    () => (state && stopId ? shuttlesForStop(state, stopId, tripTo) : []),
+    [state, stopId, tripTo],
   );
   const mine = waiting ? fleet.find((row) => row.vehicle.id === myParty?.vehicleId) : undefined;
   const next = mine ?? fleet[0] ?? null;

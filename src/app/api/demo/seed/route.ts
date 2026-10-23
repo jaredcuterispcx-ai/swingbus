@@ -27,7 +27,7 @@ export async function POST() {
   await resetDemo();
 
   const v1 = await registerVehicle({ callsign: "Green-1", capacity: 14 });
-  const v2 = await registerVehicle({ callsign: "Blue-2", capacity: 10 });
+  const v2 = await registerVehicle({ callsign: "Blue-2", capacity: 10, service: "offsite" });
 
   // Stateline Rd W outside Macroharder, clear of every stop's arrival radius
   await updateVehicleLocation({

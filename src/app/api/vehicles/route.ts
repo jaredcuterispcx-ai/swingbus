@@ -14,9 +14,14 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    const service = body.service ?? "onsite";
+    if (service !== "onsite" && service !== "offsite") {
+      throw new Error("Service must be onsite or offsite");
+    }
     const vehicle = await registerVehicle({
       callsign: String(body.callsign ?? body.label ?? ""),
       capacity: body.capacity != null ? Number(body.capacity) : undefined,
+      service,
     });
     const state = await getState();
     return NextResponse.json(

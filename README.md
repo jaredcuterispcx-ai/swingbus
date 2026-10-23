@@ -14,7 +14,7 @@ Stops start from the MEM shuttle sheet (`src/lib/stops.ts`) and are then managed
 
 The repo is public, so these defaults are too: production refuses to start without all three env vars (see [Production](#production)). The admin password also opens the driver page. Sessions are signed, http-only cookies that last 30 days; changing either password or `AUTH_SECRET` signs everyone out. Passenger pages and `GET /api/state` stay public.
 
-Offsite-only stops take ride requests only during offsite service hours, 5–10 AM and 5–10 PM Memphis time; onsite and "both" stops run 24/7. Hours live in `src/lib/service-hours.ts`.
+Offsite-only stops take ride requests only during offsite service hours, 5–10 AM and 5–10 PM Memphis time; onsite and "both" stops run 24/7. Hours live in `src/lib/service-hours.ts`. Drivers pick onsite or offsite when they start a session, and ground control only clears a shuttle for trips its service runs.
 
 Drivers' phones snap to a stop when they're inside its arrival radius (75 m by default, adjustable per stop in admin); the pickup stop auto-fills and stop lists sort nearest-first.
 
