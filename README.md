@@ -72,7 +72,7 @@ Production means any `next build` output: `npm start`, `node server.js`, the ima
 
 **Volume.** Mount persistent storage at `/data` (or wherever `DATA_DIR` points), writable by uid 1000. `store.json` holds stops (including admin edits), riders, and shuttles. Each write goes to a temp file that is then renamed over `store.json`, so a crash mid-write leaves the previous version intact. A missing file starts from the built-in stops. An unreadable file is never overwritten: requests fail and `/api/health` returns 503 until it's repaired or moved aside (moving it aside reseeds the built-in stops). State is a single file: run one instance, and stop the old one before starting its replacement.
 
-**Health.** `GET /api/health` (public) returns 200 `{"status":"ok",…}` when the store loads, `DATA_DIR` is writable and the secrets are set; otherwise 503. The image's `HEALTHCHECK` uses it.
+**Health.** `GET /api/health` (public, read-only) returns 200 `{"status":"ok","store":"ok",…}` when the secrets are set, `DATA_DIR` is writable, and `store.json` parses or doesn't exist yet (`"store":"new"`); otherwise 503. `"store":"new"` after a restart means the volume didn't persist. Point readiness and liveness probes at it; the image's `HEALTHCHECK` uses it.
 
 **Without Docker** (same rules; port 43127, data in `./data` unless `DATA_DIR` is set):
 
