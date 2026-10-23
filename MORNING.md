@@ -1,4 +1,4 @@
-# When you wake — get phones on Swing Bus
+# When you wake — get phones on swingbus
 
 The POC is built. This Cursor VM **cannot** join the xAI Tailscale network or enable Funnel. Do this on any **internal host** (desk machine, lab VM) that is already on Tailscale:
 

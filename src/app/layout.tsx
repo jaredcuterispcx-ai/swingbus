@@ -38,8 +38,15 @@ export default function RootLayout({
       <body className="antialiased">
         {children}
         <footer className="mx-auto max-w-[480px] px-5 pt-2 pb-8 text-center text-[11px] leading-relaxed text-ink-soft">
-          Swingbus brought to you by your friends in Transportation and
-          Observability Software.
+          <p>
+            swingbus brought to you by your friends in Transportation and
+            Observability Software.
+          </p>
+          <p className="mt-1">
+            Feedback? Find us at{" "}
+            <span className="font-semibold text-ink">#memphis-transportation</span> on
+            Slack.
+          </p>
         </footer>
       </body>
     </html>

@@ -6,7 +6,7 @@ Handoff notes for anyone (human or AI agent) picking this project up. Read this 
 
 A shuttle app for the XSI / MEM campus (Macroharder + offsite lots, Memphis/Southaven). It replaces a human dispatcher on the phone: riders say where they are and where they're going, drivers share GPS and log pickups, and the server routes the nearest shuttle with free seats.
 
-Name is always lowercase: **swingbus**. Footer on every page: "Swingbus brought to you by your friends in Transportation and Observability Software."
+Name is always lowercase, even at the start of a sentence: **swingbus** (never "Swingbus" or "Swing Bus"). Footer on every page: "swingbus brought to you by your friends in Transportation and Observability Software." plus "Feedback? Find us at #memphis-transportation on Slack."
 
 ## Core user flows (the product owner's words, keep these intact)
 

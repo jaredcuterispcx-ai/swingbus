@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Expose Swing Bus from an xAI Tailscale host to personal phones (no Tailscale on phone).
+# Expose swingbus from an xAI Tailscale host to personal phones (no Tailscale on phone).
 # Requires: Tailscale admin has Funnel enabled; MagicDNS + HTTPS on.
 set -euo pipefail
 

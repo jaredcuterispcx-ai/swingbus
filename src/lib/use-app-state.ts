@@ -18,7 +18,7 @@ export function useAppState(pollMs = 3000) {
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/state", { cache: "no-store" });
-      if (!res.ok) throw new Error("Could not load Swing Bus state");
+      if (!res.ok) throw new Error("Could not load swingbus state");
       const data = (await res.json()) as ClientState;
       setState(data);
       setError(null);

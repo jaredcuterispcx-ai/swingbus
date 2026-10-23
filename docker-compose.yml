@@ -1,4 +1,4 @@
-# Local / internal smoke-run for Swing Bus
+# Local / internal smoke-run for swingbus
 # Usage: docker compose up --build
 # App: http://localhost:3000
 
