@@ -134,10 +134,29 @@ async function ensureStore(): Promise<AppState> {
 
 async function persist(state: AppState) {
   await fs.mkdir(DATA_DIR, { recursive: true });
-  // Write-then-rename so a crash mid-write can't leave a truncated store.
+  // Write, fsync, rename, fsync the directory: neither a crash nor a power
+  // loss can leave a truncated store or undo the rename.
   const tmp = `${STORE_PATH}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(state, null, 2));
+  const file = await fs.open(tmp, "w");
+  try {
+    await file.writeFile(JSON.stringify(state, null, 2));
+    await file.sync();
+  } finally {
+    await file.close();
+  }
   await fs.rename(tmp, STORE_PATH);
+  await syncDir(DATA_DIR);
+}
+
+async function syncDir(dir: string) {
+  // Windows can't fsync a directory handle.
+  if (process.platform === "win32") return;
+  const handle = await fs.open(dir, "r");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
 }
 
 /** refreshGroundControl restamps updatedAt on every call; that alone isn't worth a write. */
