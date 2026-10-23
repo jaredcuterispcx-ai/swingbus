@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
-import { normalizeCallsign } from "./callsigns";
+import { allocateCallsign, normalizeCallsign, takenCallsigns } from "./callsigns";
 import { refreshGroundControl } from "./dispatch";
 import { stopAt } from "./geo";
 import { seatLedger } from "./seats";
@@ -109,30 +109,59 @@ function pruneOrphanParties(state: AppState): AppState {
 
 async function ensureStore(): Promise<AppState> {
   await fs.mkdir(DATA_DIR, { recursive: true });
+  let text: string;
   try {
-    const raw = JSON.parse(await fs.readFile(STORE_PATH, "utf8")) as Record<
-      string,
-      unknown
-    >;
-    const migrated = raw.schemaVersion !== SCHEMA_VERSION;
-    let state = migrate(raw);
-    state.schemaVersion = SCHEMA_VERSION;
-    const before = state.parties.length;
-    state = pruneOrphanParties(state);
-    if (migrated || state.parties.length !== before) {
-      await persist(state);
-    }
-    return state;
-  } catch {
+    text = await fs.readFile(STORE_PATH, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     const state = emptyState();
-    await fs.writeFile(STORE_PATH, JSON.stringify(state, null, 2));
+    await persist(state);
     return state;
   }
+  // An unreadable store is an error, not a fresh start: reseeding would
+  // overwrite admin-edited stops with the defaults.
+  const raw = JSON.parse(text) as Record<string, unknown>;
+  const migrated = raw.schemaVersion !== SCHEMA_VERSION;
+  let state = migrate(raw);
+  state.schemaVersion = SCHEMA_VERSION;
+  const before = state.parties.length;
+  state = pruneOrphanParties(state);
+  if (migrated || state.parties.length !== before) {
+    await persist(state);
+  }
+  return state;
 }
 
 async function persist(state: AppState) {
   await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(STORE_PATH, JSON.stringify(state, null, 2));
+  // Write, fsync, rename, fsync the directory: neither a crash nor a power
+  // loss can leave a truncated store or undo the rename.
+  const tmp = `${STORE_PATH}.${process.pid}.tmp`;
+  const file = await fs.open(tmp, "w");
+  try {
+    await file.writeFile(JSON.stringify(state, null, 2));
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+  await fs.rename(tmp, STORE_PATH);
+  await syncDir(DATA_DIR);
+}
+
+async function syncDir(dir: string) {
+  // Windows can't fsync a directory handle.
+  if (process.platform === "win32") return;
+  const handle = await fs.open(dir, "r");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+/** refreshGroundControl restamps updatedAt on every call; that alone isn't worth a write. */
+function withoutTimestamps(state: AppState): string {
+  return JSON.stringify(state, (key, value) => (key === "updatedAt" ? undefined : value));
 }
 
 function withWrite<T>(fn: (state: AppState) => Promise<T> | T): Promise<T> {
@@ -150,7 +179,7 @@ function withWrite<T>(fn: (state: AppState) => Promise<T> | T): Promise<T> {
 export async function getState(): Promise<AppState> {
   return withWrite(async (state) => {
     const next = refreshGroundControl(state);
-    if (JSON.stringify(next) !== JSON.stringify(state)) {
+    if (withoutTimestamps(next) !== withoutTimestamps(state)) {
       await persist(next);
     }
     return next;
@@ -224,17 +253,11 @@ export async function registerVehicle(input: {
   capacity?: number;
 }): Promise<Vehicle> {
   return withWrite(async (state) => {
-    const callsign = normalizeCallsign(input.callsign).slice(0, 32);
-    if (!callsign) throw new Error("Callsign / shuttle label is required");
-    const key = callsign.toLowerCase();
-    const duplicate = state.vehicles.find(
-      (v) => v.active && normalizeCallsign(v.callsign).toLowerCase() === key,
-    );
-    if (duplicate) {
-      throw new Error(
-        `Callsign “${duplicate.callsign}” is already on duty — pick another`,
-      );
-    }
+    const requested = normalizeCallsign(input.callsign).slice(0, 32);
+    if (!requested) throw new Error("Callsign / shuttle label is required");
+    const callsign = takenCallsigns(state.vehicles).has(requested.toLowerCase())
+      ? allocateCallsign(requested, state.vehicles)
+      : requested;
     const now = new Date().toISOString();
     const vehicle: Vehicle = {
       id: randomUUID(),
@@ -397,44 +420,60 @@ export async function boardParties(input: {
     }
 
     const now = new Date().toISOString();
+    const isOpen = (p: PassengerParty) =>
+      p.status === "waiting" || p.status === "cleared" || p.status === "boarding";
     let partyIds = input.partyIds ?? [];
     let seats = input.seats ?? 0;
     let parties = state.parties;
 
-    if (partyIds.length === 0) {
-      const candidates = state.parties.filter(
-        (p) =>
-          p.stopId === input.stopId &&
-          (p.status === "waiting" ||
-            p.status === "cleared" ||
-            p.status === "boarding") &&
-          (!p.vehicleId || p.vehicleId === input.vehicleId) &&
-          (!input.destinationId || p.destinationId === input.destinationId),
-      );
-      if (candidates.length > 0) {
+    if (partyIds.length > 0) {
+      // Seats come from riders still waiting, so resending a group can't double count.
+      const requested = new Set(partyIds);
+      const boarding = state.parties.filter((p) => requested.has(p.id) && isOpen(p));
+      if (boarding.length === 0) throw new Error("Those riders are no longer waiting");
+      partyIds = boarding.map((p) => p.id);
+      seats = boarding.reduce((n, p) => n + p.partySize, 0);
+    } else {
+      const candidates = state.parties
+        .filter(
+          (p) =>
+            p.stopId === input.stopId &&
+            isOpen(p) &&
+            (!p.vehicleId || p.vehicleId === input.vehicleId) &&
+            (!input.destinationId || p.destinationId === input.destinationId),
+        )
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      if (!seats) {
         partyIds = candidates.map((c) => c.id);
         seats = candidates.reduce((n, c) => n + c.partySize, 0);
-      } else if (input.destinationId && (input.seats ?? 0) > 0) {
-        // Driver-logged group: pax count + destination at this stop.
-        const manual: PassengerParty = {
-          id: randomUUID(),
-          stopId: input.stopId,
-          destinationId: input.destinationId,
-          partySize: Math.max(1, Math.floor(input.seats!)),
-          status: "boarding",
-          vehicleId: input.vehicleId,
-          clearanceId: null,
-          createdAt: now,
-          updatedAt: now,
-        };
-        parties = [...state.parties, manual];
-        partyIds = [manual.id];
-        seats = manual.partySize;
+      } else {
+        // Driver-logged group: their head count is what boarded. Waiting requests
+        // for the same trip that fit inside it are picked up; the rest are walk-ups.
+        seats = Math.floor(seats);
+        const picked: string[] = [];
+        let walkUps = seats;
+        for (const c of candidates) {
+          if (c.partySize > walkUps) continue;
+          picked.push(c.id);
+          walkUps -= c.partySize;
+        }
+        if (walkUps > 0 && input.destinationId) {
+          const manual: PassengerParty = {
+            id: randomUUID(),
+            stopId: input.stopId,
+            destinationId: input.destinationId,
+            partySize: walkUps,
+            status: "boarding",
+            vehicleId: input.vehicleId,
+            clearanceId: null,
+            createdAt: now,
+            updatedAt: now,
+          };
+          parties = [...state.parties, manual];
+          picked.push(manual.id);
+        }
+        partyIds = picked;
       }
-    } else if (!seats) {
-      seats = state.parties
-        .filter((p) => partyIds.includes(p.id))
-        .reduce((n, p) => n + p.partySize, 0);
     }
 
     seats = Math.max(1, seats);
@@ -539,8 +578,18 @@ export async function alight(input: {
     const idx = state.vehicles.findIndex((v) => v.id === input.vehicleId);
     if (idx < 0) throw new Error("Unknown vehicle");
     const now = new Date().toISOString();
-    const drop = Math.max(0, Math.floor(input.seats));
     const vehicle = state.vehicles[idx];
+    const toDest = input.destinationId
+      ? state.parties.filter(
+          (p) =>
+            p.vehicleId === input.vehicleId &&
+            p.status === "onboard" &&
+            p.destinationId === input.destinationId,
+        )
+      : [];
+    const drop = toDest.length
+      ? toDest.reduce((n, p) => n + p.partySize, 0)
+      : Math.max(0, Math.floor(input.seats));
     const occupied = Math.max(0, vehicle.occupied - drop);
 
     const parties = state.parties.map((p) => {
@@ -556,7 +605,7 @@ export async function alight(input: {
 
     // If destination filter, only mark matching; else mark enough by size
     let remaining = drop;
-    const adjusted = parties.map((p) => {
+    const adjusted = state.parties.map((p) => {
       if (
         !input.destinationId &&
         p.vehicleId === input.vehicleId &&
@@ -572,7 +621,11 @@ export async function alight(input: {
     const event: BoardingEvent = {
       id: randomUUID(),
       vehicleId: input.vehicleId,
-      stopId: vehicle.currentStopId ?? state.stops[0]?.id ?? "food-trucks-war-room",
+      stopId:
+        input.destinationId ??
+        vehicle.currentStopId ??
+        state.stops[0]?.id ??
+        "food-trucks-war-room",
       destinationId:
         input.destinationId ??
         vehicle.currentStopId ??

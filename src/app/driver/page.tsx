@@ -36,6 +36,7 @@ export default function DriverPage() {
   /** Last stop we auto-selected for; a manual pick sticks until the next arrival. */
   const lastArrivalRef = useRef<string | null>(null);
   const lastPushRef = useRef<{ at: number; stopId: string | null }>({ at: 0, stopId: null });
+  const callsignSeeded = useRef(false);
   const stopsRef = useRef(state?.stops ?? []);
   stopsRef.current = state?.stops ?? stopsRef.current;
 
@@ -50,14 +51,15 @@ export default function DriverPage() {
     if (saved) setVehicleId(saved);
   }, []);
 
-  useEffect(() => {
-    if (vehicleId || !state || callsign) return;
-    setCallsign(randomElectricCallsign(state.vehicles));
-  }, [state, vehicleId, callsign]);
-
   const vehicle: VehicleWithSeats | undefined = state?.vehicles.find(
     (v) => v.id === vehicleId,
   );
+
+  useEffect(() => {
+    if (!state || vehicle || callsignSeeded.current) return;
+    callsignSeeded.current = true;
+    setCallsign(randomElectricCallsign(state.vehicles));
+  }, [state, vehicle]);
 
   useEffect(() => {
     setGroups([]);
@@ -123,6 +125,17 @@ export default function DriverPage() {
     }));
   }, [state, vehicleId, pickupStopId]);
 
+  const onboard = useMemo(() => {
+    if (!state || !vehicleId) return [];
+    const byDest = new Map<string, number>();
+    for (const p of state.parties) {
+      if (p.vehicleId !== vehicleId || p.status !== "onboard") continue;
+      byDest.set(p.destinationId, (byDest.get(p.destinationId) ?? 0) + p.partySize);
+    }
+    return [...byDest.entries()].map(([destinationId, pax]) => ({ destinationId, pax }));
+  }, [state, vehicleId]);
+  const dropHere = atStop ? onboard.find((g) => g.destinationId === atStop.id) : undefined;
+
   const draftPax = groups.reduce((n, g) => n + g.pax, 0);
   const room = vehicle ? vehicle.capacity - vehicle.seats.occupied : 0;
 
@@ -183,11 +196,7 @@ export default function DriverPage() {
       setStatus(`${data.callsign} is online`);
       await refresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed";
-      setStatus(msg);
-      if (/already on duty/i.test(msg)) {
-        setCallsign(randomElectricCallsign(state?.vehicles ?? []));
-      }
+      setStatus(err instanceof Error ? err.message : "Failed");
     } finally {
       setBusy(false);
     }
@@ -288,7 +297,12 @@ export default function DriverPage() {
     try {
       let boarded = 0;
       let lastLedger = vehicle?.seats;
-      for (const g of groups) {
+      // App requests go first so a walk-up group for the same stop can't claim them.
+      const ordered = [
+        ...groups.filter((g) => g.partyIds?.length),
+        ...groups.filter((g) => !g.partyIds?.length),
+      ];
+      for (const g of ordered) {
         const res = await fetch("/api/board", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -304,6 +318,7 @@ export default function DriverPage() {
         if (!res.ok) throw new Error(data.error || "Board failed");
         boarded += data.event.seats;
         lastLedger = data.ledger;
+        setGroups((prev) => prev.filter((x) => x.id !== g.id));
       }
       // After pickup, bus is often heading toward the first group's destination
       if (groups[0]?.destinationId) {
@@ -330,8 +345,8 @@ export default function DriverPage() {
     }
   }
 
-  async function doAlight() {
-    if (!vehicleId || !vehicle) return;
+  async function doAlight(group: { destinationId: string; pax: number }) {
+    if (!vehicleId) return;
     setBusy(true);
     try {
       const res = await fetch("/api/board", {
@@ -340,7 +355,8 @@ export default function DriverPage() {
         body: JSON.stringify({
           action: "alight",
           vehicleId,
-          seats: Math.max(1, vehicle.seats.occupied),
+          destinationId: group.destinationId,
+          seats: group.pax,
         }),
       });
       const data = await res.json();
@@ -353,9 +369,6 @@ export default function DriverPage() {
       setBusy(false);
     }
   }
-
-  const showArrival =
-    atStop && vehicle?.headingStopId === atStop.id && (vehicle?.seats.occupied ?? 0) > 0;
 
   return (
     <main className="sb-shell">
@@ -455,14 +468,14 @@ export default function DriverPage() {
             <p className="text-sm text-ink-soft">Finding GPS…</p>
           )}
 
-          {showArrival && (
+          {dropHere && (
             <button
               type="button"
               className="sb-btn sb-btn-primary sb-btn-lg w-full"
               disabled={busy}
-              onClick={() => void doAlight()}
+              onClick={() => void doAlight(dropHere)}
             >
-              Drop off {vehicle.seats.occupied}
+              Drop off {dropHere.pax}
             </button>
           )}
 
@@ -591,15 +604,30 @@ export default function DriverPage() {
             </div>
           )}
 
-          {!showArrival && vehicle.seats.occupied > 0 && groups.length === 0 && (
-            <button
-              type="button"
-              className="sb-btn sb-btn-ghost w-full"
-              disabled={busy}
-              onClick={() => void doAlight()}
-            >
-              Drop off {vehicle.seats.occupied}
-            </button>
+          {onboard.length > 0 && groups.length === 0 && (
+            <div>
+              <span className="sb-label">On board</span>
+              <ul>
+                {onboard.map((g) => (
+                  <li key={g.destinationId} className="sb-row cursor-default">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-black font-bold text-white tabular-nums">
+                      {g.pax}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-semibold">
+                      {stopName(state, g.destinationId)}
+                    </span>
+                    <button
+                      type="button"
+                      className="sb-btn sb-btn-ghost shrink-0"
+                      disabled={busy}
+                      onClick={() => void doAlight(g)}
+                    >
+                      Drop off
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}
