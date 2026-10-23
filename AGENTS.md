@@ -97,7 +97,6 @@ Phones reach swingbus over a public HTTPS hostname (driver GPS needs HTTPS). Tai
 ## Open items
 
 - Real lat/lng for Food Trucks / War Room, Crossroads, Church Parking Lot and Spam / Nexus (product owner offered to provide them).
-- Use the onsite/offsite tags: only offer offsite stops in service windows; tag shuttles as onsite vs offsite.
 - Durable hosting: the image is ready (see Running and `DEPLOY.md`); the xAI host, public hostname and secrets are being set up outside this repo. Wherever it runs: one instance and a persistent volume at `/data`.
 - Auth is shared passwords only (no per-person accounts or audit trail). Production refuses to run on the public defaults.
 - GitHub (`jaredcuterispcx-ai/swingbus`): the original build environment had no write credentials, so `main` there may still be just the initial README commit. Branch `cursor/github-main-db12` holds this code merged onto that initial commit (unrelated histories already joined) and can be pushed straight to `main`.
