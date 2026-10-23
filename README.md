@@ -84,18 +84,7 @@ DRIVER_PASSWORD='…' ADMIN_PASSWORD='…' AUTH_SECRET='…' npm start
 
 `docker compose up --build` runs the image on port 3000 with a named volume; it reads the three secrets (and `PUBLIC_URL`, if set) from your shell or a gitignored `.env`.
 
-## Personal phones without Tailscale (xAI network host)
-
-Run on an internal / Tailscale host, then:
-
-```bash
-./scripts/expose-funnel.sh 43127
-# → https://<device>.<tailnet>.ts.net
-```
-
-That Funnel URL works on cellular. Print QRs from `/stops` **on that hostname**. Details: `DEPLOY.md`.
-
-> This Cursor cloud VM can demo the UI locally. It cannot join corp Tailscale or enable Funnel — do that on an xAI host (desk NUC, lab VM, etc.).
+Hosting rules for any platform (one replica, public HTTPS, no tunnels): [DEPLOY.md](DEPLOY.md).
 
 ## API
 

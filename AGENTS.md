@@ -89,13 +89,13 @@ Multi-stage `Dockerfile` (Node 22 alpine → Next standalone): runs `node server
 
 Cursor setup: `.cursor/rules/swingbus.mdc` is always applied (naming, design, engineering rules). `.cursor/environment.json` runs `npm ci` at build time and `scripts/cloud-start.sh` on boot, which keeps the dev server up in the `swingbus-dev` tmux session (log: `/tmp/swingbus-dev.log`). Add `DRIVER_PASSWORD`, `ADMIN_PASSWORD`, `AUTH_SECRET` as Cloud Agent secrets.
 
-Phones off the corporate network: run on a stable internal host and expose it with Tailscale Funnel (`scripts/expose-funnel.sh`, `DEPLOY.md`). Ephemeral sandboxes and free quick-tunnels were unreliable.
+Phones reach swingbus over a public HTTPS hostname (driver GPS needs HTTPS). Tailscale Funnel and ad-hoc tunnels aren't allowed: `DEPLOY.md` has the host-agnostic rules, and the xAI hosting plan is kept outside this public repo.
 
 ## Open items
 
 - Real lat/lng for every stop (product owner offered to provide them).
 - Use the onsite/offsite tags: only offer offsite stops in service windows; tag shuttles as onsite vs offsite.
-- Durable hosting (internal host + Funnel, or a managed host). `data/store.json` needs a persistent volume wherever it runs.
+- Durable hosting: the image is ready (see Running and `DEPLOY.md`); the xAI host, public hostname and secrets are being set up outside this repo. Wherever it runs: one instance and a persistent volume at `/data`.
 - Auth is shared passwords only (no per-person accounts or audit trail). Production refuses to run on the public defaults.
 - GitHub (`jaredcuterispcx-ai/swingbus`): the original build environment had no write credentials, so `main` there may still be just the initial README commit. Branch `cursor/github-main-db12` holds this code merged onto that initial commit (unrelated histories already joined) and can be pushed straight to `main`.
 - Driver GPS flow on the current UI needs one more real-phone check: start a session at a stop, confirm the location chip shows "Here" and pickup auto-selects that stop, then move and confirm it updates.
