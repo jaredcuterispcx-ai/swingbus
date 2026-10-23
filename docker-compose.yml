@@ -1,34 +1,23 @@
-# Local / internal smoke-run for swingbus
-# Usage: docker compose up --build
-# App: http://localhost:3000
+# Local / internal smoke run of the production image (see README.md → Production).
+# Put DRIVER_PASSWORD, ADMIN_PASSWORD and AUTH_SECRET (and optionally PUBLIC_URL)
+# in .env (gitignored), then:
+#   docker compose up --build        # http://localhost:3000
 
 services:
   swing-bus:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     image: swing-bus:local
     ports:
       - "3000:3000"
     environment:
-      NODE_ENV: production
-      PORT: "3000"
-      HOSTNAME: "0.0.0.0"
+      DRIVER_PASSWORD: ${DRIVER_PASSWORD:?set DRIVER_PASSWORD}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
+      # Optional: address printed QR codes point to, e.g. https://swingbus.example.com
+      PUBLIC_URL: ${PUBLIC_URL:-}
     volumes:
-      - swing-bus-data:/app/data
+      - swing-bus-data:/data
     restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
 
 volumes:
   swing-bus-data:

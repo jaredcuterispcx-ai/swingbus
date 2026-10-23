@@ -1,19 +1,24 @@
-node_modules
-.next
+# Build context = what `next build` needs.
 .git
-.gitignore
-*.md
-.env*
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-.DS_Store
+.next
+node_modules
+# Local runtime state (store.json) must never be baked into an image.
+data
+**/.env*
+.cursor
+scripts
+**/*.md
 coverage
 .vercel
 *.pem
 *.tsbuildinfo
 next-env.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+**/.DS_Store
+.gitignore
 Dockerfile*
 docker-compose*.yml
 .dockerignore

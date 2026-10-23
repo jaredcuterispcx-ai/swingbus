@@ -1,37 +1,36 @@
-# swingbus — production Next.js standalone image
-# Requires next.config.ts: output: "standalone"
+# swingbus production image: Next.js standalone server, non-root, listens on $PORT.
+#   docker build -t swingbus .
+# Running it needs DRIVER_PASSWORD, ADMIN_PASSWORD, AUTH_SECRET and a volume
+# at /data; PUBLIC_URL (address printed QR codes use) is optional.
+# See README.md → Production.
 
-FROM node:20-alpine AS base
-RUN apk add --no-cache libc6-compat
+FROM node:24-alpine AS base
 WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM base AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
-ENV HOSTNAME=0.0.0.0
-
-RUN addgroup --system --gid 1001 nodejs \
-  && adduser --system --uid 1001 nextjs
-
+ENV NODE_ENV=production \
+    PORT=3000 \
+    DATA_DIR=/data
+# App files stay root-owned (read-only to the server); only /data is writable.
 COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
-
-USER nextjs
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+RUN mkdir -p /data && chown node:node /data
+# Numeric so orchestrators enforcing runAsNonRoot can verify it (1000 = node).
+USER 1000:1000
 EXPOSE 3000
-
-CMD ["node", "server.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD ["node", "-e", "fetch(`http://127.0.0.1:${process.env.PORT}/api/health`).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+# Runtimes may set HOSTNAME to the container/pod name, which would make Next
+# bind only that address; always listen on all interfaces.
+CMD ["sh", "-c", "HOSTNAME=0.0.0.0 exec node server.js"]
