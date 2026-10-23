@@ -10,14 +10,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-/** When ADMIN_PIN is set, stop edits require a matching x-admin-pin header. */
-function unauthorized(req: Request) {
-  const pin = process.env.ADMIN_PIN;
-  if (!pin) return null;
-  if (req.headers.get("x-admin-pin") === pin) return null;
-  return NextResponse.json({ error: "Admin PIN required" }, { status: 401 });
-}
-
 function fail(err: unknown, status = 400) {
   return NextResponse.json(
     { error: err instanceof Error ? err.message : "Failed" },
@@ -47,15 +39,10 @@ function toInput(body: Record<string, unknown>): StopInput {
 
 export async function GET() {
   const state = await getState();
-  return NextResponse.json({
-    stops: state.stops,
-    pinRequired: Boolean(process.env.ADMIN_PIN),
-  });
+  return NextResponse.json({ stops: state.stops });
 }
 
 export async function POST(req: Request) {
-  const denied = unauthorized(req);
-  if (denied) return denied;
   try {
     const body = await req.json();
     if (body.action === "restore_defaults") {
@@ -69,8 +56,6 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const denied = unauthorized(req);
-  if (denied) return denied;
   try {
     const body = await req.json();
     const stop = await updateStop(String(body.id ?? ""), toInput(body));
@@ -82,8 +67,6 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const denied = unauthorized(req);
-  if (denied) return denied;
   try {
     const id = new URL(req.url).searchParams.get("id") ?? "";
     const ok = await deleteStop(id);

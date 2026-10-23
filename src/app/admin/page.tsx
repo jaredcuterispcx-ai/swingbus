@@ -4,11 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { ChevronIcon, PinIcon } from "@/components/icons";
+import { SignOutButton } from "@/components/sign-out";
 import { DEFAULT_ARRIVAL_RADIUS_M } from "@/lib/geo";
 import { serviceLabel } from "@/lib/stops";
 import type { Stop, StopService } from "@/lib/types";
-
-const PIN_KEY = "swingbus.adminPin";
 
 type Draft = {
   name: string;
@@ -46,16 +45,10 @@ function splitPair(value: string): [string, string] | null {
 
 export default function AdminPage() {
   const [stops, setStops] = useState<Stop[] | null>(null);
-  const [pinRequired, setPinRequired] = useState(false);
-  const [pin, setPin] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    setPin(localStorage.getItem(PIN_KEY) ?? "");
-  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -63,7 +56,6 @@ export default function AdminPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not load stops");
       setStops(data.stops);
-      setPinRequired(Boolean(data.pinRequired));
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not load stops");
@@ -78,17 +70,14 @@ export default function AdminPage() {
     async (method: string, body?: unknown, query = "") => {
       const res = await fetch(`/api/stops${query}`, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-          ...(pin ? { "x-admin-pin": pin } : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: body ? JSON.stringify(body) : undefined,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Request failed");
       return data;
     },
-    [pin],
+    [],
   );
 
   async function restoreDefaults() {
@@ -120,24 +109,6 @@ export default function AdminPage() {
           </Link>
         }
       />
-
-      {pinRequired && (
-        <label className="sb-panel mb-4 block space-y-1.5">
-          <span className="sb-label">Admin PIN</span>
-          <input
-            className="sb-input font-mono"
-            type="password"
-            inputMode="numeric"
-            autoComplete="off"
-            value={pin}
-            onChange={(e) => {
-              setPin(e.target.value);
-              localStorage.setItem(PIN_KEY, e.target.value);
-            }}
-            placeholder="Needed to save changes"
-          />
-        </label>
-      )}
 
       {notice && (
         <p className="mb-4 rounded-xl border border-[var(--line)] bg-surface px-3 py-2 text-sm text-ink-soft">
@@ -233,6 +204,9 @@ export default function AdminPage() {
           >
             Restore MEM shuttle sheet stops
           </button>
+          <div className="mt-3 flex justify-center">
+            <SignOutButton />
+          </div>
         </>
       )}
     </main>
