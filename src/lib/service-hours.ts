@@ -1,4 +1,4 @@
-import type { Stop, StopId, StopService } from "./types";
+import type { ShuttleService, Stop, StopId, StopService } from "./types";
 
 /**
  * Service hours from the MEM shuttle sheet, as Memphis wall-clock times.
@@ -10,7 +10,7 @@ export const SERVICE_TIME_ZONE = "America/Chicago";
 export type ServiceWindow = { start: string; end: string };
 
 /** `null` runs around the clock. */
-export const SERVICE_HOURS: Record<"onsite" | "offsite", readonly ServiceWindow[] | null> = {
+export const SERVICE_HOURS: Record<ShuttleService, readonly ServiceWindow[] | null> = {
   onsite: null,
   offsite: [
     { start: "05:00", end: "10:00" },
@@ -29,10 +29,41 @@ export type StopServiceStatus = {
 const ALWAYS_OPEN: StopServiceStatus = { open: true, opensAt: null, closesAt: null };
 
 /** "both" stops get onsite and offsite shuttles; untagged stops count as onsite. */
-function servicesFor(service: StopService | undefined): (keyof typeof SERVICE_HOURS)[] {
+function servicesFor(service: StopService | undefined): ShuttleService[] {
   if (service === "offsite") return ["offsite"];
   if (service === "both") return ["onsite", "offsite"];
   return ["onsite"];
+}
+
+export function servesStop(service: ShuttleService, stop: Pick<Stop, "service">): boolean {
+  return servicesFor(stop.service).includes(service);
+}
+
+/**
+ * The shuttle service a trip needs, or null when either will do. A trip to or
+ * from an offsite-only lot needs the offsite shuttle even when its other end is
+ * an onsite-only stop, so nobody is left without a shuttle; any other trip
+ * touching an onsite-only stop needs the onsite shuttle.
+ */
+export function tripService(
+  pickup: Pick<Stop, "service">,
+  destination: Pick<Stop, "service">,
+): ShuttleService | null {
+  const ends = [servicesFor(pickup.service), servicesFor(destination.service)];
+  for (const service of ["offsite", "onsite"] as const) {
+    if (ends.some((s) => s.length === 1 && s[0] === service)) return service;
+  }
+  return null;
+}
+
+/** Whether ground control may clear a shuttle on `service` for this trip. */
+export function runsTrip(
+  service: ShuttleService,
+  pickup: Pick<Stop, "service">,
+  destination: Pick<Stop, "service">,
+): boolean {
+  const needed = tripService(pickup, destination);
+  return needed === null || needed === service;
 }
 
 /** Daily windows a stop is served in, or null when it is served around the clock. */

@@ -12,6 +12,7 @@ import type {
   BoardingEvent,
   Clearance,
   PassengerParty,
+  ShuttleService,
   Stop,
   StopService,
   Vehicle,
@@ -44,6 +45,7 @@ function migrate(raw: Record<string, unknown>): AppState {
     state.vehicles = (state.vehicles ?? []).map((v) => ({
       ...v,
       headingStopId: v.headingStopId ?? null,
+      service: v.service ?? "onsite",
     }));
     return state;
   }
@@ -57,6 +59,7 @@ function migrate(raw: Record<string, unknown>): AppState {
     id: String(d.id),
     callsign: String(d.label ?? d.callsign ?? "Shuttle"),
     capacity: Number(d.capacity ?? 14),
+    service: "onsite" as const,
     occupied: Number(d.onboard ?? d.occupied ?? 0),
     status: d.active === false ? ("offline" as const) : ("available" as const),
     lat: (d.lat as number | null) ?? null,
@@ -226,6 +229,7 @@ export async function cancelParty(id: string): Promise<PassengerParty | null> {
 export async function registerVehicle(input: {
   callsign: string;
   capacity?: number;
+  service?: ShuttleService;
 }): Promise<Vehicle> {
   return withWrite(async (state) => {
     const callsign = normalizeCallsign(input.callsign).slice(0, 32);
@@ -244,6 +248,7 @@ export async function registerVehicle(input: {
       id: randomUUID(),
       callsign,
       capacity: Math.min(40, Math.max(4, input.capacity ?? 14)),
+      service: input.service ?? "onsite",
       occupied: 0,
       status: "available",
       lat: null,

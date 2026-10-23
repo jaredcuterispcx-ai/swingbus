@@ -1,4 +1,5 @@
 import { seatLedger } from "./seats";
+import { runsTrip } from "./service-hours";
 import type {
   AppState,
   Clearance,
@@ -132,7 +133,9 @@ export function computeClearances(state: AppState): Clearance[] {
       const pack: PassengerParty[] = [];
       let seats = slot.remaining;
       for (const req of stillUnclaimed) {
-        if (req.partySize <= seats) {
+        const destination = stopById(state.stops, req.destinationId);
+        const serves = !destination || runsTrip(slot.vehicle.service, stop, destination);
+        if (serves && req.partySize <= seats) {
           pack.push(req);
           seats -= req.partySize;
           claimed.add(req.id);
