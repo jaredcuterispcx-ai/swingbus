@@ -30,7 +30,7 @@ See [docs/GROUND-CONTROL.md](docs/GROUND-CONTROL.md) for the seat ledger and lif
 
 ## QR codes
 
-Ground control → **QR codes** prints one card per stop (four to a page, dashed cut lines) that opens that stop's pickup page, plus a driver code that opens `/driver`. Codes point at the address the page was opened at (a proxy's `X-Forwarded-Host` / `X-Forwarded-Proto` first). Set `PUBLIC_URL` (e.g. `https://swingbus.example.com`) to pin them, or type a one-off address in the page's Public URL field. Localhost addresses are refused, since phones can't open them. `/stops` redirects here.
+Ground control → **QR codes** prints one card per stop (four to a page, dashed cut lines) that opens that stop's pickup page, plus a driver code that opens `/driver`. Codes point at the address in the browser's address bar. Set `PUBLIC_URL` (e.g. `https://swingbus.example.com`) to pin them, or type a one-off address in the page's Public URL field. A code holds only that origin plus the page path, never a password or session token. Localhost addresses are refused, since phones can't open them. `/stops` redirects here.
 
 ## Seat math (drivers)
 

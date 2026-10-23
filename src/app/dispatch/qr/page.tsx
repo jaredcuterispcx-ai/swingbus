@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { QrControls, QrSheet } from "@/components/qr-sheet";
-import { resolveQrBase } from "@/lib/public-url";
+import { QrPrintSheet } from "@/components/qr-sheet";
+import { resolveQrPreset } from "@/lib/public-url";
 import { getState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -12,19 +12,19 @@ export default async function StopQrPage({
 }: {
   searchParams: Promise<{ base?: string | string[] }>;
 }) {
-  const { base: override } = await searchParams;
-  const [{ stops }, base] = await Promise.all([getState(), resolveQrBase(override)]);
+  const [{ base }, { stops }] = await Promise.all([searchParams, getState()]);
 
   return (
     <main className="sb-shell sb-qr-shell">
-      <QrControls view="stops" base={base} />
-      <QrSheet
+      <QrPrintSheet
+        view="stops"
+        preset={resolveQrPreset(base)}
         cards={stops.map((stop) => ({
           key: stop.id,
           label: stop.name,
           tag: stop.shortCode,
           cta: "Scan to request a ride",
-          url: base.url && `${base.url}/passenger/${encodeURIComponent(stop.id)}`,
+          path: `/passenger/${encodeURIComponent(stop.id)}`,
         }))}
       />
     </main>

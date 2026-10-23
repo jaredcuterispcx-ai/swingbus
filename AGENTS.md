@@ -60,7 +60,7 @@ API routes (`src/app/api/`): `state` (GET, DELETE = reset riders/fleet but keep 
 
 Pages: `/` home, `/passenger/[stopId]`, `/driver`, `/dispatch` (ground control), `/dispatch/qr` + `/dispatch/qr/driver` (printable stop and driver QR codes; `/stops` redirects there), `/admin`, `/deploy` (phone-access notes).
 
-QR codes take their base from the page's Public URL field, else `PUBLIC_URL`, else the address ground control opened the page at (`X-Forwarded-Host` / `-Proto` before `Host`). Loopback addresses are always refused (`src/lib/public-url.ts`). Print styles are the `sb-qr-*` classes in `globals.css`: `@page` margin 0 so Chrome prints no URL/date header, each `.sb-qr-page` is one sheet.
+QR codes take their base from the page's Public URL field, else `PUBLIC_URL`, else the browser's own address (`window.location`). Don't switch that to request headers: awaiting `headers()` in a server component copies the cookie into the dev-mode RSC payload. Only the bare origin plus the page path is encoded, so a code never carries a password or token, and loopback addresses are refused (`src/lib/public-url.ts`). Print styles are the `sb-qr-*` classes in `globals.css`: `@page` margin 0 so Chrome prints no URL/date header, each `.sb-qr-page` is one sheet.
 
 ## Stops
 

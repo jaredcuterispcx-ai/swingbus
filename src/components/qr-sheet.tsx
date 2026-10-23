@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
-import type { QrBase } from "@/lib/public-url";
+import { useSyncExternalStore } from "react";
+import { normalizePublicUrl, type QrPreset } from "@/lib/public-url";
 import { AppHeader } from "./app-header";
 import { BoltMark } from "./brand";
 
@@ -11,7 +12,8 @@ export type QrCardData = {
   label: string;
   tag?: string;
   cta: string;
-  url: string | null;
+  /** Appended to the bare base origin; a code holds nothing else. */
+  path: string;
 };
 
 type View = "stops" | "driver";
@@ -21,11 +23,58 @@ const VIEWS: { view: View; label: string; href: string }[] = [
   { view: "driver", label: "Driver", href: "/dispatch/qr/driver" },
 ];
 
-export function QrControls({ view, base }: { view: View; base: QrBase }) {
-  const query = base.overridden && base.url ? `?base=${encodeURIComponent(base.url)}` : "";
-  const problem = base.rejected
-    ? `Phones can't open ${base.rejected}. Enter the public address.`
-    : base.url
+const noSubscribe = () => () => {};
+
+/**
+ * The preset, else the address this page is open at; null while unknown or
+ * loopback. Read from the browser, not request headers: awaiting headers() in
+ * a server component copies the whole request, cookie included, into the
+ * dev-mode RSC payload.
+ */
+function useQrBase(preset: QrPreset) {
+  const here = useSyncExternalStore(noSubscribe, () => window.location.href, () => null);
+  return {
+    base: preset.url ?? normalizePublicUrl(here),
+    resolving: preset.url === null && here === null,
+  };
+}
+
+export function QrPrintSheet({
+  view,
+  preset,
+  cards,
+  poster = false,
+}: {
+  view: View;
+  preset: QrPreset;
+  cards: QrCardData[];
+  poster?: boolean;
+}) {
+  const { base, resolving } = useQrBase(preset);
+  return (
+    <>
+      <QrControls view={view} preset={preset} base={base} resolving={resolving} />
+      <QrSheet base={base} cards={cards} poster={poster} />
+    </>
+  );
+}
+
+function QrControls({
+  view,
+  preset,
+  base,
+  resolving,
+}: {
+  view: View;
+  preset: QrPreset;
+  base: string | null;
+  resolving: boolean;
+}) {
+  const query = preset.overridden && preset.url ? `?base=${encodeURIComponent(preset.url)}` : "";
+  const field = preset.rejected ?? base ?? "";
+  const problem = preset.rejected
+    ? `Phones can't open ${preset.rejected}. Enter the public address.`
+    : base || resolving
       ? null
       : "Phones can't open localhost. Enter the public address or set PUBLIC_URL.";
 
@@ -52,9 +101,10 @@ export function QrControls({ view, base }: { view: View; base: QrBase }) {
           <label className="min-w-0 flex-1 space-y-1.5">
             <span className="sb-label">Public URL</span>
             <input
+              key={field}
               name="base"
               className="sb-input"
-              defaultValue={base.rejected ?? base.url ?? ""}
+              defaultValue={field}
               placeholder="https://swingbus.example.com"
               inputMode="url"
               autoCapitalize="off"
@@ -69,7 +119,7 @@ export function QrControls({ view, base }: { view: View; base: QrBase }) {
         <button
           type="button"
           className="sb-btn sb-btn-primary min-h-[3.1rem] md:w-36"
-          disabled={!base.url}
+          disabled={!base}
           onClick={() => window.print()}
         >
           Print
@@ -83,7 +133,15 @@ export function QrControls({ view, base }: { view: View; base: QrBase }) {
 }
 
 /** Cards in sheets of four (one per sheet for a poster); each sheet prints on its own page. */
-export function QrSheet({ cards, poster = false }: { cards: QrCardData[]; poster?: boolean }) {
+function QrSheet({
+  base,
+  cards,
+  poster,
+}: {
+  base: string | null;
+  cards: QrCardData[];
+  poster: boolean;
+}) {
   const perPage = poster ? 1 : 4;
   const pages: QrCardData[][] = [];
   for (let i = 0; i < cards.length; i += perPage) pages.push(cards.slice(i, i + perPage));
@@ -93,7 +151,7 @@ export function QrSheet({ cards, poster = false }: { cards: QrCardData[]; poster
       {pages.map((page, i) => (
         <section key={i} className="sb-qr-page">
           {page.map(({ key, ...card }) => (
-            <QrCard key={key} {...card} />
+            <QrCard key={key} base={base} {...card} />
           ))}
         </section>
       ))}
@@ -101,7 +159,13 @@ export function QrSheet({ cards, poster = false }: { cards: QrCardData[]; poster
   );
 }
 
-function QrCard({ label, tag, cta, url }: Omit<QrCardData, "key">) {
+function QrCard({
+  base,
+  label,
+  tag,
+  cta,
+  path,
+}: Omit<QrCardData, "key"> & { base: string | null }) {
   return (
     <article className="sb-qr-card">
       <div className="sb-qr-top">
@@ -113,28 +177,26 @@ function QrCard({ label, tag, cta, url }: Omit<QrCardData, "key">) {
       </div>
       {/* Non-breaking space keeps "Food Trucks /" together: no line starts with the slash. */}
       <h2 className="sb-qr-label">{label.replace(/ \//g, "\u00a0/")}</h2>
-      {url ? (
-        <QRCodeSVG value={url} level="M" marginSize={2} title={label} className="sb-qr-code" />
+      {base ? (
+        <QRCodeSVG value={base + path} level="M" marginSize={2} title={label} className="sb-qr-code" />
       ) : (
         <div className="sb-qr-code sb-qr-missing" aria-hidden="true" />
       )}
       <div>
         <p className="sb-qr-cta">{cta}</p>
-        <p className="sb-qr-url">{url ? <BreakableUrl url={url} /> : "—"}</p>
+        {/* A link too long for one line wraps after the host, not at a hyphen in the path. */}
+        <p className="sb-qr-url">
+          {base ? (
+            <>
+              {base}
+              <wbr />
+              <span className="inline-block max-w-full">{path}</span>
+            </>
+          ) : (
+            "—"
+          )}
+        </p>
       </div>
     </article>
-  );
-}
-
-/** A link that doesn't fit on one line wraps after the host, not at a hyphen in the path. */
-function BreakableUrl({ url }: { url: string }) {
-  const cut = url.indexOf("/", url.indexOf("//") + 2);
-  if (cut === -1) return <>{url}</>;
-  return (
-    <>
-      {url.slice(0, cut)}
-      <wbr />
-      <span className="inline-block max-w-full">{url.slice(cut)}</span>
-    </>
   );
 }

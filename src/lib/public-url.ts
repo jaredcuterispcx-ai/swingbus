@@ -1,17 +1,9 @@
-import { headers } from "next/headers";
-
 /**
- * Base address for printed QR codes. Phones scan them off paper, so a
- * loopback address (localhost, 127.x, ::1, 0.0.0.0) is never usable.
+ * Base address for printed QR codes. Only a bare origin is ever kept (no
+ * credentials, path, query or fragment), so a code can't carry a password or
+ * token. Loopback addresses (localhost, 127.x, ::1, 0.0.0.0) are refused:
+ * phones scan these off paper.
  */
-export type QrBase = {
-  /** What every QR link starts with; null when only a loopback address is known. */
-  url: string | null;
-  /** True when `url` came from the page's `?base=` field. */
-  overridden: boolean;
-  /** A `?base=` value that was refused, echoed back so it can be fixed. */
-  rejected: string | null;
-};
 
 const HAS_SCHEME = /^[a-z][a-z\d+.-]*:\/\//i;
 
@@ -32,7 +24,7 @@ function isLoopbackHost(hostname: string): boolean {
   );
 }
 
-/** "host.example.com" → "https://host.example.com"; null when phones can't use it. */
+/** "host.example.com/x?y" → "https://host.example.com"; null when phones can't use it. */
 export function normalizePublicUrl(input: string | null | undefined): string | null {
   const raw = input?.trim();
   if (!raw) return null;
@@ -44,33 +36,25 @@ export function normalizePublicUrl(input: string | null | undefined): string | n
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
   if (isLoopbackHost(url.hostname)) return null;
-  return url.origin + url.pathname.replace(/\/+$/, "");
+  return url.origin;
 }
 
-function firstValue(header: string | null): string | null {
-  return header?.split(",")[0]?.trim() || null;
-}
+export type QrPreset = {
+  /** Base from the page's Public URL field or PUBLIC_URL; null means the address the page is open at. */
+  url: string | null;
+  /** True when `url` came from the page's `?base=` field. */
+  overridden: boolean;
+  /** A `?base=` value that was refused, echoed back so it can be fixed. */
+  rejected: string | null;
+};
 
-/**
- * The page's `?base=` field wins, then the PUBLIC_URL env var, then the
- * address this request reached the site at (a proxy's X-Forwarded-Host and
- * X-Forwarded-Proto before Host).
- */
-export async function resolveQrBase(override?: string | string[]): Promise<QrBase> {
-  const typed = (Array.isArray(override) ? override[0] : override)?.trim() || null;
+/** Server side: the page's `?base=` field wins over the PUBLIC_URL env var. */
+export function resolveQrPreset(field?: string | string[]): QrPreset {
+  const typed = (Array.isArray(field) ? field[0] : field)?.trim() || null;
   const fromField = normalizePublicUrl(typed);
-  const rejected = typed && !fromField ? typed : null;
-  if (fromField) return { url: fromField, overridden: true, rejected };
-
-  const fromEnv = normalizePublicUrl(process.env.PUBLIC_URL);
-  if (fromEnv) return { url: fromEnv, overridden: false, rejected };
-
-  const h = await headers();
-  const host = firstValue(h.get("x-forwarded-host")) ?? firstValue(h.get("host"));
-  const proto = firstValue(h.get("x-forwarded-proto")) ?? "http";
   return {
-    url: host ? normalizePublicUrl(`${proto}://${host}`) : null,
-    overridden: false,
-    rejected,
+    url: fromField ?? normalizePublicUrl(process.env.PUBLIC_URL),
+    overridden: fromField !== null,
+    rejected: typed && !fromField ? typed : null,
   };
 }
