@@ -25,7 +25,7 @@ Name is always lowercase, even at the start of a sentence: **swingbus** (never "
 
 **Admin** (`/admin`): rename, move, add, delete stops; persisted. "Use my location" while standing at a curb, or paste `lat, lng`. 
 
-**Passwords**: `/driver` needs "swingbus-driver"; `/dispatch` and `/admin` need "swingbus-admin" (admin also opens driver). Enforced in `src/middleware.ts` for pages and mutating APIs via signed cookies (`src/lib/auth.ts`); overridable with `DRIVER_PASSWORD` / `ADMIN_PASSWORD` / `AUTH_SECRET`. Passenger pages and reads stay public.
+**Passwords**: `/driver` needs "swingbus-driver"; `/dispatch` and `/admin` need "swingbus-admin" (admin also opens driver). Enforced in `src/middleware.ts` for pages and mutating APIs via signed cookies (`src/lib/auth.ts`); overridable with `DRIVER_PASSWORD` / `ADMIN_PASSWORD` / `AUTH_SECRET`. Passenger pages and reads stay public. Those defaults are public (so is the repo) and only work in `npm run dev`: production builds exit at boot (`src/instrumentation.ts`) and refuse sign-in and sessions unless all three env vars are set, the passwords aren't the defaults and differ, and `AUTH_SECRET` has 32+ characters (`authConfigProblem()` in `src/lib/auth.ts`).
 
 ## Design direction
 
@@ -38,7 +38,7 @@ Name is always lowercase, even at the start of a sentence: **swingbus** (never "
 
 ## Architecture
 
-- Next.js 15 App Router + TypeScript + Tailwind v4. No database: state lives in `data/store.json` (gitignored), written through a serialized write chain in `src/lib/store.ts`.
+- Next.js 15 App Router + TypeScript + Tailwind v4. No database: state lives in `store.json` under `DATA_DIR` (default `data/`, gitignored; `/data` in the container), written through a serialized write chain in `src/lib/store.ts`. `persist()` writes a temp file and renames it over `store.json`, so a crash never leaves a half-written store. Missing file → built-in defaults; unreadable file → requests fail and the file is left alone, never reseeded over. `src/lib/backups.ts` (started by `src/instrumentation.ts`) keeps a dated daily copy beside it (`store.json.YYYY-MM-DD`, newest `BACKUP_DAYS`, default 14). The app must run as **exactly one process**: the state is one file behind an in-process lock, so no horizontal scaling and no serverless.
 - Clients poll `GET /api/state` (2–8 s depending on page).
 - Fonts are bundled via `@fontsource-variable/*`. Do **not** switch back to `next/font/google`: it downloads at boot and failing downloads took the whole app down.
 - Custom CSS classes (`sb-*`) live in `@layer components`, base resets in `@layer base`, so Tailwind utilities can override them. Unlayered rules beat utilities — that bug once hid button labels.
@@ -49,6 +49,7 @@ Key modules (`src/lib/`):
 |------|------|
 | `types.ts` | Stop, PassengerParty, Vehicle, Clearance, BoardingEvent, AppState |
 | `store.ts` | Persistence, migrations (`SCHEMA_VERSION`), all mutations incl. stop CRUD |
+| `backups.ts` | Dated daily copies of `store.json` in `DATA_DIR`, pruned to `BACKUP_DAYS` |
 | `dispatch.ts` | Ground-control routing: issues clearances (seat holds) to the nearest vehicle with room |
 | `seats.ts` | Seat ledger: `available = capacity − occupied − reserved` |
 | `fleet.ts` | Per-stop ranking of shuttles + ETA (haversine, ~22 km/h) for the waiting view |
@@ -76,16 +77,27 @@ npm run dev                  # http://127.0.0.1:43127
 ./scripts/dev-forever.sh     # same, auto-restarts if the server exits
 ```
 
+Production container (full env table and volume notes in README → Production):
+
+```bash
+docker build -t swingbus .
+docker run -p 3000:3000 -v swingbus-data:/data \
+  -e DRIVER_PASSWORD=… -e ADMIN_PASSWORD=… -e AUTH_SECRET=… \
+  -e PUBLIC_URL=https://swingbus.example.com swingbus
+```
+
+Multi-stage `Dockerfile` (Node 22 alpine → Next standalone): runs `node server.js` as uid 1000 with `PORT=3000`, `HOSTNAME=0.0.0.0` (Kubernetes overwrites HOSTNAME with the pod name, so pod specs must set it too) and `DATA_DIR=/data` (mount a persistent volume there as a directory, never `store.json` alone, writable by uid 1000). That runtime contract (PORT, HOSTNAME, DATA_DIR, `/api/health`, non-root `node server.js`, Node 22, no baked-in secrets) must stay identical to the production deploy image. `DRIVER_PASSWORD`, `ADMIN_PASSWORD` and `AUTH_SECRET` are required; `PUBLIC_URL` (pins the address printed QR codes point to; unset: the address ground control was opened at) and `BACKUP_DAYS` are optional. `GET /api/health` (public, read-only: it must never call `getState()`, which can write) returns 200 when the data dir is writable and `store.json` parses or doesn't exist yet, else 503; the image's `HEALTHCHECK` uses it. Run exactly one process: no extra replicas, no serverless, no multi-process managers. `docker-compose.yml` is a local smoke run of the same image. Without Docker: `npm ci && npm run build`, then `npm start` with the secrets set.
+
 Cursor setup: `.cursor/rules/swingbus.mdc` is always applied (naming, design, engineering rules). `.cursor/environment.json` runs `npm ci` at build time and `scripts/cloud-start.sh` on boot, which keeps the dev server up in the `swingbus-dev` tmux session (log: `/tmp/swingbus-dev.log`). Add `DRIVER_PASSWORD`, `ADMIN_PASSWORD`, `AUTH_SECRET` as Cloud Agent secrets.
 
-Phones off the corporate network: run on a stable internal host and expose it with Tailscale Funnel (`scripts/expose-funnel.sh`, `DEPLOY.md`). Ephemeral sandboxes and free quick-tunnels were unreliable.
+Phones reach swingbus over a public HTTPS hostname (driver GPS needs HTTPS). Tailscale Funnel and ad-hoc tunnels aren't allowed: `DEPLOY.md` has the host-agnostic rules, and the xAI hosting plan is kept outside this public repo.
 
 ## Open items
 
 - Real lat/lng for every stop (product owner offered to provide them).
 - Use the onsite/offsite tags: only offer offsite stops in service windows; tag shuttles as onsite vs offsite.
-- Durable hosting (internal host + Funnel, or a managed host). `data/store.json` needs a persistent volume wherever it runs.
-- Auth is shared passwords only (no per-person accounts or audit trail); default passwords live in source, so set env overrides in production.
+- Durable hosting: the image is ready (see Running and `DEPLOY.md`); the xAI host, public hostname and secrets are being set up outside this repo. Wherever it runs: one instance and a persistent volume at `/data`.
+- Auth is shared passwords only (no per-person accounts or audit trail). Production refuses to run on the public defaults.
 - GitHub (`jaredcuterispcx-ai/swingbus`): the original build environment had no write credentials, so `main` there may still be just the initial README commit. Branch `cursor/github-main-db12` holds this code merged onto that initial commit (unrelated histories already joined) and can be pushed straight to `main`.
 - Driver GPS flow on the current UI needs one more real-phone check: start a session at a stop, confirm the location chip shows "Here" and pickup auto-selects that stop, then move and confirm it updates.
 
@@ -94,3 +106,6 @@ Phones off the corporate network: run on a stable internal host and expose it wi
 - Restart the dev server with `pkill -f next-server` (the `dev-forever.sh` loop brings it back); Ctrl-C in its tmux pane kills the loop.
 - Admin lat/lng inputs split a pasted "lat, lng" pair only on paste or blur — never in `onChange`, or typing gets mangled.
 - Deleting a stop is refused while riders reference it, and at least 2 stops must remain.
+- `npm start`, `node server.js` and the image are production builds: they exit at boot without `DRIVER_PASSWORD`, `ADMIN_PASSWORD`, `AUTH_SECRET`. Use `npm run dev` locally.
+- Don't keep `data/` out of the standalone build with `outputFileTracingExcludes: { "*": [...] }`: Next applies `*` to its own server trace as a substring match and drops `next/dist/lib/metadata/*`, so the server can't boot. `.dockerignore` already keeps `data/` out of images.
+- Don't bind Next to an IP such as `127.0.0.1` (`HOSTNAME`, `-H`): Next 15 then makes the login redirect an absolute `http://localhost:<port>/login`, even behind proxy headers, which breaks phones behind any proxy or tunnel. Bind to `0.0.0.0` (the repo and image default) or `localhost` (which may listen on `::1` only).

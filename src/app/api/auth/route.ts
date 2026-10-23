@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   SESSION_COOKIE,
   SESSION_DAYS,
+  authConfigProblem,
   createSession,
   readSession,
   roleForPassword,
@@ -36,6 +37,12 @@ export async function GET(req: Request) {
 
 /** Sign in: { password, as?: "driver" | "admin" } */
 export async function POST(req: Request) {
+  if (authConfigProblem()) {
+    return NextResponse.json(
+      { error: "Sign-in is off: server passwords aren't set" },
+      { status: 503 },
+    );
+  }
   const body = await req.json().catch(() => ({}));
   const role = roleForPassword(String(body.password ?? ""));
   const wanted: Role = body.as === "admin" ? "admin" : "driver";
