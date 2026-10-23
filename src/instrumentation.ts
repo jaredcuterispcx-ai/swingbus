@@ -1,7 +1,7 @@
 import { authConfigProblem } from "./lib/auth";
 
 /** Runs once when the server boots (not during `next build`). */
-export function register() {
+export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const problem = authConfigProblem();
     if (problem) {
@@ -10,5 +10,7 @@ export function register() {
       );
       process.exit(1);
     }
+    const { startDailyBackups } = await import("./lib/backups");
+    startDailyBackups();
   }
 }

@@ -41,4 +41,4 @@ yarn-error.log*
 next-env.d.ts
 
 # runtime POC state
-/data/store.json
+/data/store.json*

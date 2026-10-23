@@ -17,7 +17,7 @@ import type {
 } from "./types";
 
 export const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(process.cwd(), "data"));
-const STORE_PATH = path.join(DATA_DIR, "store.json");
+export const STORE_PATH = path.join(DATA_DIR, "store.json");
 export const SCHEMA_VERSION = 3;
 
 let writeChain: Promise<void> = Promise.resolve();
