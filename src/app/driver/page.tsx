@@ -457,7 +457,6 @@ export default function DriverPage() {
           ) : (
             <p className="text-sm text-ink-soft">Finding GPS…</p>
           )}
-
           <ClosedStopsNote state={state} />
 
           {showArrival && (

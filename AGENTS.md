@@ -65,9 +65,7 @@ Pages: `/` home, `/passenger/[stopId]`, `/driver`, `/dispatch` (ground control),
 
 Nine stops from the "MEM Shuttle Info" sheet: Food Trucks / War Room, Crossroads, Macroharder West, Macroharder East, Church Parking Lot (Surge Concierge / Onboarding), Southland Mall Parking Lot, Duke, Gun Range, Spam / Nexus. Each is tagged onsite / offsite / both.
 
-Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 PM. Dispatcher phone: (956) 658-1860.
-
-Those hours are enforced from `SERVICE_HOURS` in `src/lib/service-hours.ts`, always in America/Chicago whatever the server or phone timezone. Offsite-only stops can't be requested as pickup or destination outside their windows (passengers see "Opens 5 PM"; drivers and ground control see them as closed). "Both" and untagged stops run 24/7. Hours are config, not per stop: per-stop hours would need a new stop field, a `SCHEMA_VERSION` bump, and an admin editor. The server decides open/closed and sends it in `GET /api/state`; clients only format it.
+Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 PM. Dispatcher phone: (956) 658-1860. The hours are enforced from `SERVICE_HOURS` in `src/lib/service-hours.ts`, always in America/Chicago whatever the server or phone timezone: offsite-only stops can't be requested as pickup or destination outside their windows (passengers see "Opens 5 PM"; drivers and ground control see them as closed), while "both" and untagged stops run 24/7. Hours are config, not per stop; per-stop hours would need a new stop field, a `SCHEMA_VERSION` bump, and an admin editor. The server decides open or closed and sends it in `GET /api/state`; clients only format it.
 
 **Coordinates are approximate placeholders** (geocoding was blocked in the build environment). ETAs and "next shuttle" ranking are only rough until real pins are entered in `/admin`.
 
@@ -87,7 +85,7 @@ Phones off the corporate network: run on a stable internal host and expose it wi
 ## Open items
 
 - Real lat/lng for every stop (product owner offered to provide them).
-- Tag shuttles as onsite vs offsite (stop service hours already use the stop tags).
+- Use the onsite/offsite tags: only offer offsite stops in service windows; tag shuttles as onsite vs offsite.
 - Durable hosting (internal host + Funnel, or a managed host). `data/store.json` needs a persistent volume wherever it runs.
 - Auth is shared passwords only (no per-person accounts or audit trail); default passwords live in source, so set env overrides in production.
 - GitHub (`jaredcuterispcx-ai/swingbus`): the original build environment had no write credentials, so `main` there may still be just the initial README commit. Branch `cursor/github-main-db12` holds this code merged onto that initial commit (unrelated histories already joined) and can be pushed straight to `main`.
