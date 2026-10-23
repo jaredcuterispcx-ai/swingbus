@@ -40,6 +40,8 @@ export interface PassengerParty {
   updatedAt: string;
   note?: string;
   contactHint?: string;
+  /** SHA-256 of the cancel token the requesting phone holds; never sent to any client. */
+  cancelTokenHash?: string;
 }
 
 /**

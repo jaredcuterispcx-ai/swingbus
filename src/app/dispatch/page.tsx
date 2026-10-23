@@ -1,16 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { MiniMap } from "@/components/mini-map";
 import { ServiceHoursPanel } from "@/components/service-hours";
 import { SignOutButton } from "@/components/sign-out";
 import { serviceLabel } from "@/lib/stops";
-import { stopName, useAppState, type VehicleWithSeats } from "@/lib/use-app-state";
+import {
+  stopName,
+  useStaffState,
+  type StaffParty,
+  type VehicleWithSeats,
+} from "@/lib/use-app-state";
 
 export default function GroundControlPage() {
-  const { state, loading, error, refresh } = useAppState(2000);
+  const { state, loading, error, refresh } = useStaffState(2000);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const stands = useMemo(() => {
     if (!state) return [];
@@ -57,6 +63,19 @@ export default function GroundControlPage() {
 
   async function seedDemo() {
     await fetch("/api/demo/seed", { method: "POST" });
+    await refresh();
+  }
+
+  async function cancelRide(p: StaffParty) {
+    const trip = `${p.partySize} from ${stopName(state, p.stopId)} to ${stopName(state, p.destinationId)}`;
+    if (!confirm(`Cancel ${trip}?`)) return;
+    const res = await fetch("/api/parties", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "cancel", id: p.id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setCancelError(res.ok ? null : data.error || "Couldn't cancel that ride");
     await refresh();
   }
 
@@ -145,6 +164,7 @@ export default function GroundControlPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <section className="sb-panel sb-rise sb-rise-delay-1">
           <h2 className="sb-brand text-2xl">Waiting</h2>
+          {cancelError && <p className="mt-2 text-sm text-danger">{cancelError}</p>}
           {stands.length === 0 ? (
             <p className="mt-3 text-sm text-ink-soft/75">No one waiting</p>
           ) : (
@@ -165,14 +185,24 @@ export default function GroundControlPage() {
                   <p className="text-xs text-ink-soft/70">
                     {waitingSeats} waiting · {clearedSeats} cleared
                   </p>
-                  <p className="mt-1 text-xs text-ink-soft/80">
-                    {open
-                      .map(
-                        (p) =>
-                          `${p.partySize}→${stopName(state, p.destinationId)} (${p.status})`,
-                      )
-                      .join(" · ")}
-                  </p>
+                  <ul className="mt-1 space-y-1">
+                    {open.map((p) => (
+                      <li key={p.id} className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 text-sm break-words text-ink-soft/80">
+                          {p.partySize} → {stopName(state, p.destinationId)} ({p.status})
+                        </span>
+                        {(p.status === "waiting" || p.status === "cleared") && (
+                          <button
+                            type="button"
+                            className="sb-btn sb-btn-ghost shrink-0 px-3 text-sm"
+                            onClick={() => void cancelRide(p)}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 </li>
               ))}
             </ul>

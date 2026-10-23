@@ -9,8 +9,12 @@ import {
   satisfies,
   type Role,
 } from "@/lib/auth";
+import { clientKey, rateLimiter } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
+
+/** Matches the Cloudflare rule: 10 sign-in attempts a minute per IP, then a 10-minute wait. */
+const signIns = rateLimiter({ max: 10, windowMs: 60_000, blockMs: 10 * 60_000 });
 
 function cookieOptions(req: Request) {
   const https =
@@ -43,6 +47,14 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
+  const ip = clientKey(req);
+  const wait = signIns.take(ip);
+  if (wait) {
+    return NextResponse.json(
+      { error: `Too many tries. Try again in ${Math.ceil(wait / 60)} min.` },
+      { status: 429, headers: { "Retry-After": String(wait) } },
+    );
+  }
   const body = await req.json().catch(() => ({}));
   const role = roleForPassword(String(body.password ?? ""));
   const wanted: Role = body.as === "admin" ? "admin" : "driver";
@@ -51,6 +63,8 @@ export async function POST(req: Request) {
     await new Promise((r) => setTimeout(r, 600));
     return NextResponse.json({ error: "Wrong password" }, { status: 401 });
   }
+  // Only wrong passwords count, so a shift signing in over one site's Wi-Fi isn't blocked.
+  signIns.refund(ip);
   const res = NextResponse.json({ role });
   res.cookies.set(SESSION_COOKIE, await createSession(role), cookieOptions(req));
   return res;

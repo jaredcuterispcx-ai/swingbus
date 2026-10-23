@@ -40,6 +40,10 @@ Name is always lowercase, even at the start of a sentence: **swingbus** (never "
 
 - Next.js 15 App Router + TypeScript + Tailwind v4. No database: state lives in `store.json` under `DATA_DIR` (default `data/`, gitignored; `/data` in the container), written through a serialized write chain in `src/lib/store.ts`. `persist()` writes a temp file and renames it over `store.json`, so a crash never leaves a half-written store. Missing file → built-in defaults; unreadable file → requests fail and the file is left alone, never reseeded over. `src/lib/backups.ts` (started by `src/instrumentation.ts`) keeps a dated daily copy beside it (`store.json.YYYY-MM-DD`, newest `BACKUP_DAYS`, default 14). The app must run as **exactly one process**: the state is one file behind an in-process lock, so no horizontal scaling and no serverless.
 - Clients poll `GET /api/state` (2–8 s depending on page).
+- Anonymous `GET /api/state` returns only the passenger feed (`publicState` in `src/lib/feed.ts`): stops with their `serviceStatus`, shuttles in service (position, current and next stop, onsite or offsite, free seats), which shuttle is coming to which stop, and the phone's own ride. No other riders' requests, free text, events or offline shuttles. Signed-in drivers and admins get the full state (`staffState`). Pages read it with `useAppState` (passenger feed) or `useStaffState` (full state).
+- Requesting a ride sets an http-only `sb_ride` cookie (path `/api`, one day) holding that ride's cancel token; only its SHA-256 is stored (`src/lib/ride-token.ts`). Cancelling needs that cookie or a driver/admin session, and only waiting or cleared rides can be cancelled. A phone gets one open request at a time.
+- Per-IP limits (`src/lib/rate-limit.ts`, in memory, keyed on `CF-Connecting-IP`, else the nearest `X-Forwarded-For` hop): `POST /api/parties` 60 a minute; `POST /api/auth` 10 wrong passwords a minute, then a 10-minute wait. They match the planned Cloudflare rules.
+- Delivered and cancelled requests are deleted 3 hours after they close (`CLOSED_RIDE_RETENTION_MS` in `store.ts`).
 - Fonts are bundled via `@fontsource-variable/*`. Do **not** switch back to `next/font/google`: it downloads at boot and failing downloads took the whole app down.
 - Custom CSS classes (`sb-*`) live in `@layer components`, base resets in `@layer base`, so Tailwind utilities can override them. Unlayered rules beat utilities — that bug once hid button labels.
 
@@ -50,6 +54,9 @@ Key modules (`src/lib/`):
 | `types.ts` | Stop, PassengerParty, Vehicle, Clearance, BoardingEvent, AppState |
 | `store.ts` | Persistence, migrations (`SCHEMA_VERSION`), all mutations incl. stop CRUD |
 | `backups.ts` | Dated daily copies of `store.json` in `DATA_DIR`, pruned to `BACKUP_DAYS` |
+| `feed.ts` | What `GET /api/state` returns: the passenger feed (`publicState`) or the full state for staff (`staffState`) |
+| `ride-token.ts` | Rider cancel tokens: the `sb_ride` cookie, hashing, finding a phone's ride |
+| `rate-limit.ts` | In-memory per-IP limits for sign-in and ride requests |
 | `dispatch.ts` | Ground-control routing: issues clearances (seat holds) to the nearest vehicle with room that runs the trip's service |
 | `seats.ts` | Seat ledger: `available = capacity − occupied − reserved` |
 | `fleet.ts` | Per-stop ranking of the shuttles that could take the rider + ETA (haversine, ~22 km/h) for the waiting view |
@@ -106,6 +113,7 @@ Phones reach swingbus over a public HTTPS hostname (driver GPS needs HTTPS). Tai
 
 - Restart the dev server with `pkill -f next-server` (the `dev-forever.sh` loop brings it back); Ctrl-C in its tmux pane kills the loop.
 - Admin lat/lng inputs split a pasted "lat, lng" pair only on paste or blur — never in `onChange`, or typing gets mangled.
+- Scripts that read `parties` from `GET /api/state` need a driver or admin `sb_session` cookie; anonymous calls get the passenger feed. Rate limits live in the server process and reset on restart; give each simulated phone its own `CF-Connecting-IP` so tests don't trip each other's limits.
 - Deleting a stop is refused while riders reference it, and at least 2 stops must remain.
 - `npm start`, `node server.js` and the image are production builds: they exit at boot without `DRIVER_PASSWORD`, `ADMIN_PASSWORD`, `AUTH_SECRET`. Use `npm run dev` locally.
 - Don't keep `data/` out of the standalone build with `outputFileTracingExcludes: { "*": [...] }`: Next applies `*` to its own server trace as a substring match and drops `next/dist/lib/metadata/*`, so the server can't boot. `.dockerignore` already keeps `data/` out of images.

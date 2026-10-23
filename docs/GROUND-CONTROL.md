@@ -39,6 +39,8 @@ A bus is **full** when `available === 0`, even if some seats are only *held* and
 4. Driver accepts clearance, arrives, **boards** → reserved becomes **occupied**.
 5. At destination, driver **alights** → occupied drops; party **delivered**.
 
+A party can be **cancelled** only while waiting or cleared: by the phone that requested it (its `sb_ride` cancel-token cookie), or by ground control from the Waiting board. Delivered and cancelled parties are deleted 3 hours after they close.
+
 ## Vehicle lifecycle
 
 `offline → available → enroute → at_stand / boarding → full → …`
