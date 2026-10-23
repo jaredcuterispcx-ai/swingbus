@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { alight, boardParties } from "@/lib/store";
+import { alight, boardParties, markNoShow } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,15 @@ export async function POST(req: Request) {
         destinationId: body.destinationId
           ? String(body.destinationId)
           : undefined,
+      });
+      return NextResponse.json(result);
+    }
+
+    if (body.action === "no_show") {
+      const result = await markNoShow({
+        vehicleId: String(body.vehicleId ?? ""),
+        stopId: String(body.stopId ?? ""),
+        partyIds: Array.isArray(body.partyIds) ? body.partyIds.map(String) : [],
       });
       return NextResponse.json(result);
     }
