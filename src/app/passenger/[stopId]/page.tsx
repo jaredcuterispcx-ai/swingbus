@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { BoltGlyph } from "@/components/brand";
 import { ChevronIcon, PinIcon, TripDots, UsersIcon } from "@/components/icons";
@@ -10,22 +10,14 @@ import { MiniMap } from "@/components/mini-map";
 import { shuttlesForStop } from "@/lib/fleet";
 import { stopName, useAppState } from "@/lib/use-app-state";
 
-const PARTY_KEY = "swingbus.partyId";
-
 export default function PassengerStopPage() {
   const params = useParams<{ stopId: string }>();
   const stopId = params.stopId;
   const { state, loading, error, refresh } = useAppState(2500);
   const [destinationId, setDestinationId] = useState("");
   const [partySize, setPartySize] = useState(1);
-  const [partyId, setPartyId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const saved = localStorage.getItem(PARTY_KEY);
-    if (saved) setPartyId(saved);
-  }, []);
 
   const stop = state?.stops.find((s) => s.id === stopId);
   const destinations = useMemo(
@@ -33,11 +25,11 @@ export default function PassengerStopPage() {
     [state, stopId],
   );
 
-  const myParty = state?.parties.find(
-    (p) =>
-      p.id === partyId &&
-      (p.status === "waiting" || p.status === "cleared" || p.status === "boarding"),
-  );
+  const ride = state?.ride;
+  const myParty =
+    ride && (ride.status === "waiting" || ride.status === "cleared" || ride.status === "boarding")
+      ? ride
+      : undefined;
   const waiting = Boolean(myParty && myParty.stopId === stopId);
 
   const fleet = useMemo(
@@ -58,8 +50,6 @@ export default function PassengerStopPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Request failed");
-      localStorage.setItem(PARTY_KEY, data.id);
-      setPartyId(data.id);
       await refresh();
       setDestinationId("");
     } catch (err) {
@@ -70,14 +60,12 @@ export default function PassengerStopPage() {
   }
 
   async function cancelWait() {
-    if (!partyId) return;
+    if (!myParty) return;
     await fetch("/api/parties", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "cancel", id: partyId }),
+      body: JSON.stringify({ action: "cancel", id: myParty.id }),
     });
-    localStorage.removeItem(PARTY_KEY);
-    setPartyId(null);
     setDestinationId("");
     await refresh();
   }

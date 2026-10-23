@@ -5,10 +5,10 @@ import { useMemo } from "react";
 import { AppHeader } from "@/components/app-header";
 import { MiniMap } from "@/components/mini-map";
 import { SignOutButton } from "@/components/sign-out";
-import { stopName, useAppState, type VehicleWithSeats } from "@/lib/use-app-state";
+import { stopName, useStaffState, type VehicleWithSeats } from "@/lib/use-app-state";
 
 export default function GroundControlPage() {
-  const { state, loading, error, refresh } = useAppState(2000);
+  const { state, loading, error, refresh } = useStaffState(2000);
 
   const stands = useMemo(() => {
     if (!state) return [];

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { staffParty } from "@/lib/feed";
 import { activeClearances, seatLedger } from "@/lib/seats";
 import { getState } from "@/lib/store";
 
@@ -25,7 +26,7 @@ export async function GET() {
         stop,
         waitingSeats: waiting.reduce((n, p) => n + p.partySize, 0),
         clearedSeats: cleared.reduce((n, p) => n + p.partySize, 0),
-        parties: open,
+        parties: open.map(staffParty),
         destinations: Object.entries(
           open.reduce<Record<string, number>>((acc, p) => {
             acc[p.destinationId] = (acc[p.destinationId] ?? 0) + p.partySize;
