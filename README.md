@@ -24,9 +24,13 @@ See [docs/GROUND-CONTROL.md](docs/GROUND-CONTROL.md) for the seat ledger and lif
 | Passenger | `/passenger`, `/passenger/[stopId]` |
 | Driver / vehicle | `/driver` |
 | Ground control | `/dispatch` |
-| Stand QR sheet | `/stops` |
+| Printable QR codes (stops, driver) | `/dispatch/qr`, `/dispatch/qr/driver` |
 | Stop admin | `/admin` |
 | Phone deploy cheat-sheet | `/deploy` |
+
+## QR codes
+
+Ground control → **QR codes** prints one card per stop (four to a page, dashed cut lines) that opens that stop's pickup page, plus a driver code that opens `/driver`. Codes point at the address in the browser's address bar. Set `PUBLIC_URL` (e.g. `https://swingbus.example.com`) to pin them, or type a one-off address in the page's Public URL field. A code holds only that origin plus the page path, never a password or session token. Localhost addresses are refused, since phones can't open them. `/stops` redirects here.
 
 ## Seat math (drivers)
 
@@ -59,7 +63,7 @@ Run on an internal / Tailscale host, then:
 # → https://<device>.<tailnet>.ts.net
 ```
 
-That Funnel URL works on cellular. Print QRs from `/stops` **on that hostname**. Details: `DEPLOY.md`.
+That Funnel URL works on cellular. Print QR codes from `/dispatch/qr` **on that hostname**, or set `PUBLIC_URL` to it. Details: `DEPLOY.md`.
 
 > This Cursor cloud VM can demo the UI locally. It cannot join corp Tailscale or enable Funnel — do that on an xAI host (desk NUC, lab VM, etc.).
 
