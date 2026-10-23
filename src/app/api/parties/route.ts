@@ -1,10 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, readSession } from "@/lib/auth";
 import { publicRide } from "@/lib/feed";
+import { clientKey, rateLimiter } from "@/lib/rate-limit";
 import { RIDE_COOKIE, rideCookieOptions } from "@/lib/ride-token";
 import { RideError, cancelParty, createParty } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
+
+/** Roomy enough for a whole site behind one Wi-Fi address; matches the Cloudflare rule. */
+const requests = rateLimiter({ max: 60, windowMs: 60_000 });
 
 function fail(err: unknown) {
   return NextResponse.json(
@@ -14,6 +18,13 @@ function fail(err: unknown) {
 }
 
 export async function POST(req: NextRequest) {
+  const wait = requests.take(clientKey(req));
+  if (wait) {
+    return NextResponse.json(
+      { error: "Too many ride requests from this network. Try again in a minute." },
+      { status: 429, headers: { "Retry-After": String(wait) } },
+    );
+  }
   try {
     const body = await req.json();
     const { party, cancelToken } = await createParty({
