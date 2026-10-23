@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/app-header";
+import { ChevronIcon, PinIcon } from "@/components/icons";
 import { DEFAULT_ARRIVAL_RADIUS_M } from "@/lib/geo";
 import { serviceLabel } from "@/lib/stops";
 import type { Stop, StopService } from "@/lib/types";
@@ -109,15 +111,15 @@ export default function AdminPage() {
 
   return (
     <main className="sb-shell">
-      <AppHeader backHref="/dispatch" backLabel="Ground control" badge="Admin" />
-
-      <header className="sb-rise mb-5">
-        <h1 className="sb-brand text-4xl tracking-tight">Stops</h1>
-        <p className="mt-2 text-ink-soft">
-          Rename, move, or add pickup stops. Changes save to the server and show
-          up for riders and drivers right away.
-        </p>
-      </header>
+      <AppHeader
+        backHref="/dispatch"
+        title="Stops"
+        right={
+          <Link href="/stops" className="sb-pill">
+            QR codes
+          </Link>
+        }
+      />
 
       {pinRequired && (
         <label className="sb-panel mb-4 block space-y-1.5">
@@ -215,7 +217,9 @@ export default function AdminPage() {
                         {stop.lat.toFixed(5)}, {stop.lng.toFixed(5)}
                       </p>
                     </div>
-                    <span className="shrink-0 text-sm text-leaf">Edit</span>
+                    <span className="shrink-0 text-ink-soft">
+                      <ChevronIcon />
+                    </span>
                   </button>
                 </li>
               ),
@@ -398,7 +402,8 @@ function StopEditor({
           disabled={locating}
           onClick={useMyLocation}
         >
-          {locating ? "Getting GPS fix…" : "📍 Use my current location"}
+          <PinIcon />
+          {locating ? "Getting GPS fix…" : "Use my location"}
         </button>
         {accuracy != null && (
           <p className="text-xs text-ink-soft">
@@ -431,7 +436,7 @@ function StopEditor({
           </label>
         </div>
         <p className="text-xs text-ink-soft">
-          Tip: paste “lat, lng” from Google Maps into either box.
+          Paste “lat, lng” into either box.
           {hasCoords && (
             <>
               {" "}

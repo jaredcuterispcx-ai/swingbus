@@ -17,15 +17,7 @@ export default function StopsPage() {
 
   return (
     <main className="sb-shell !max-w-[900px]">
-      <AppHeader badge="QR sheet" />
-
-      <header className="sb-rise mb-6">
-        <h1 className="sb-brand text-4xl tracking-tight">Stand codes</h1>
-        <p className="mt-2 max-w-xl text-ink-soft">
-          Print and tape at each curb. Generate on the public Funnel hostname so
-          phones work off Tailscale.
-        </p>
-      </header>
+      <AppHeader backHref="/admin" title="QR codes" />
 
       {loading && <p className="text-sm text-ink-soft/70">Loading stops…</p>}
       {error && (
@@ -52,7 +44,7 @@ export default function StopsPage() {
               <p className="mt-1 mb-4 text-xs text-ink-soft/70">{stop.description}</p>
               <div className="rounded-2xl bg-white p-3 shadow-sm">
                 {url ? (
-                  <QRCodeSVG value={url} size={148} bgColor="#121217" fgColor="#00e5ff" />
+                  <QRCodeSVG value={url} size={148} bgColor="#ffffff" fgColor="#000000" />
                 ) : (
                   <div className="h-[148px] w-[148px] animate-pulse rounded bg-mist/40" />
                 )}

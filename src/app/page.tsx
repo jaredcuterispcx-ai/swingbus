@@ -1,88 +1,96 @@
 "use client";
 
 import Link from "next/link";
-import { serviceLabel } from "@/lib/stops";
+import { useMemo, useState } from "react";
+import { BoltGlyph, Wordmark } from "@/components/brand";
+import { ChevronIcon, PinIcon, SearchIcon } from "@/components/icons";
+import { MiniMap } from "@/components/mini-map";
+import { nextShuttleForStop } from "@/lib/fleet";
 import { useAppState } from "@/lib/use-app-state";
 
 export default function HomePage() {
-  const { state, loading } = useAppState(8000);
+  const { state, loading, error } = useAppState(8000);
+  const [query, setQuery] = useState("");
+
+  const rows = useMemo(() => {
+    if (!state) return [];
+    const q = query.trim().toLowerCase();
+    return state.stops
+      .filter((s) => !q || s.name.toLowerCase().includes(q) || s.shortCode.toLowerCase() === q)
+      .map((stop) => ({ stop, next: nextShuttleForStop(state, stop.id) }));
+  }, [state, query]);
+
+  const online = state?.vehicles.filter((v) => v.active).length ?? 0;
 
   return (
     <main className="sb-shell">
-      <section className="sb-hero sb-rise mb-5">
-        <div className="relative z-[1]">
-          <div className="mb-8 flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/xsi-mark.svg"
-              alt="XSI"
-              width={48}
-              height={48}
-              className="rounded-[14px]"
-            />
-            <div>
-              <p className="sb-chip">XSI · mobility</p>
-              <p className="sb-brand text-2xl leading-none tracking-tight">XSI</p>
-            </div>
-          </div>
+      <header className="mb-4 flex min-h-12 items-center justify-between">
+        <Wordmark size={30} />
+        <Link href="/driver" className="sb-pill">
+          Drive
+        </Link>
+      </header>
 
-          <h1 className="sb-brand text-[2.75rem] leading-[0.95] tracking-tight sm:text-5xl">
-            Swing Bus
-          </h1>
-          <p className="mt-3 max-w-[20rem] text-[0.98rem] leading-relaxed text-ink-soft">
-            MEM campus shuttles — pick your stop, set your destination, see
-            which bus is coming next.
-          </p>
-        </div>
-      </section>
+      <div className="relative mb-5">
+        <MiniMap
+          stops={state?.stops ?? []}
+          vehicles={(state?.vehicles ?? []).filter((v) => v.active)}
+          height={190}
+        />
+        <span className="sb-pill sb-pill-dark absolute bottom-3 left-3 text-xs">
+          <BoltGlyph size={12} />
+          {online} online
+        </span>
+      </div>
 
-      <section className="sb-rise sb-rise-delay-1 mb-4">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="sb-brand text-lg">Where are you?</h2>
-          <Link href="/stops" className="font-mono text-[11px] text-leaf uppercase">
-            Scan QR
-          </Link>
-        </div>
-        {loading && (
-          <p className="text-sm text-ink-soft">Loading stops…</p>
-        )}
-        <div className="grid gap-2">
-          {(state?.stops ?? []).map((stop) => (
-            <Link
-              key={stop.id}
-              href={`/passenger/${stop.id}`}
-              className="sb-mode-row"
-            >
-              <div>
-                <p className="sb-chip mb-0.5">
-                  {stop.shortCode}
-                  {stop.service ? ` · ${serviceLabel(stop.service)}` : ""}
-                </p>
-                <p className="sb-brand text-xl">{stop.name}</p>
-                <p className="text-sm text-ink-soft">{stop.description}</p>
-              </div>
-              <span className="text-leaf">→</span>
+      <h1 className="sb-brand mb-3 text-3xl">Where are you?</h1>
+
+      <label className="relative mb-2 block">
+        <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2">
+          <SearchIcon />
+        </span>
+        <input
+          className="sb-input pl-11"
+          placeholder="Search stops"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          enterKeyHint="search"
+        />
+      </label>
+
+      {loading && <p className="py-4 text-sm text-ink-soft">Loading…</p>}
+      {error && <p className="py-4 text-sm text-danger">{error}</p>}
+
+      <ul>
+        {rows.map(({ stop, next }) => (
+          <li key={stop.id}>
+            <Link href={`/passenger/${stop.id}`} className="sb-row">
+              <span className="sb-icon-btn size-10">
+                <PinIcon />
+              </span>
+              <span className="min-w-0 flex-1 truncate font-semibold">{stop.name}</span>
+              {next?.etaMinutes != null && (
+                <span className="text-sm font-semibold tabular-nums">{next.etaMinutes} min</span>
+              )}
+              <span className="text-ink-soft">
+                <ChevronIcon />
+              </span>
             </Link>
-          ))}
-        </div>
-      </section>
+          </li>
+        ))}
+        {state && rows.length === 0 && (
+          <li className="py-6 text-center text-sm text-ink-soft">No stops match “{query}”</li>
+        )}
+      </ul>
 
-      <Link
-        href="/driver"
-        className="sb-btn sb-btn-ghost sb-rise sb-rise-delay-2 w-full"
-      >
-        I&apos;m driving
-      </Link>
-
-      <p className="mt-5 text-center font-mono text-[11px] tracking-wide text-ink-soft/60 uppercase">
-        <Link href="/dispatch" className="inline-block px-2 py-2">
+      <nav className="mt-6 flex justify-center gap-4 text-xs font-medium text-ink-soft">
+        <Link href="/dispatch" className="px-2 py-2">
           Ground control
         </Link>
-        ·
-        <Link href="/admin" className="inline-block px-2 py-2">
+        <Link href="/admin" className="px-2 py-2">
           Admin
         </Link>
-      </p>
+      </nav>
     </main>
   );
 }

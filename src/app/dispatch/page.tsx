@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { AppHeader } from "@/components/app-header";
+import { MiniMap } from "@/components/mini-map";
 import { stopName, useAppState, type VehicleWithSeats } from "@/lib/use-app-state";
 
 export default function GroundControlPage() {
@@ -58,28 +59,29 @@ export default function GroundControlPage() {
 
   return (
     <main className="sb-shell !max-w-[860px]">
-      <AppHeader badge="Control" />
+      <AppHeader title="Ground control" />
 
       <header className="sb-rise mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="sb-brand text-4xl tracking-tight">Live network</h1>
-          <p className="mt-2 max-w-lg text-ink-soft">
-            Fleet seat tape · stand demand · auto clearances. Nearest vehicle
-            with free seats gets the hold.
-          </p>
-        </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/admin" className="sb-btn sb-btn-ghost text-sm">
             Edit stops
           </Link>
           <button type="button" className="sb-btn sb-btn-accent text-sm" onClick={seedDemo}>
-            Seed scenario
+            Demo data
           </button>
           <button type="button" className="sb-btn sb-btn-ghost text-sm" onClick={resetDemo}>
             Reset
           </button>
         </div>
       </header>
+
+      <div className="mb-4">
+        <MiniMap
+          stops={state?.stops ?? []}
+          vehicles={fleet}
+          height={260}
+        />
+      </div>
 
       {loading && <p className="text-sm text-ink-soft/70">Loading board…</p>}
       {error && (
@@ -89,10 +91,10 @@ export default function GroundControlPage() {
       )}
 
       <section className="sb-panel sb-rise mb-4">
-        <h2 className="sb-brand text-2xl">Fleet seat tape</h2>
+        <h2 className="sb-brand text-2xl">Fleet</h2>
         {fleet.length === 0 ? (
           <p className="mt-3 text-sm text-ink-soft/75">
-            No vehicles on duty. A driver opens Driver mode and goes on callsign.
+            No shuttles online
           </p>
         ) : (
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -136,9 +138,9 @@ export default function GroundControlPage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <section className="sb-panel sb-rise sb-rise-delay-1">
-          <h2 className="sb-brand text-2xl">Stands</h2>
+          <h2 className="sb-brand text-2xl">Waiting</h2>
           {stands.length === 0 ? (
-            <p className="mt-3 text-sm text-ink-soft/75">All stands clear.</p>
+            <p className="mt-3 text-sm text-ink-soft/75">No one waiting</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {stands.map(({ stop, open, waitingSeats, clearedSeats }) => (
@@ -175,8 +177,7 @@ export default function GroundControlPage() {
           <h2 className="sb-brand text-2xl">Clearances</h2>
           {clearances.length === 0 ? (
             <p className="mt-3 text-sm text-ink-soft/75">
-              No clearances. Need waiting passengers and a vehicle with GPS + free
-              seats.
+              None right now
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
@@ -202,9 +203,9 @@ export default function GroundControlPage() {
       </div>
 
       <section className="sb-panel sb-rise sb-rise-delay-3 mt-4">
-        <h2 className="sb-brand text-2xl">Recent movements</h2>
+        <h2 className="sb-brand text-2xl">Recent</h2>
         {(state?.events.length ?? 0) === 0 ? (
-          <p className="mt-3 text-sm text-ink-soft/75">No board/alight events yet.</p>
+          <p className="mt-3 text-sm text-ink-soft/75">Nothing yet</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {state!.events.slice(0, 10).map((e) => {

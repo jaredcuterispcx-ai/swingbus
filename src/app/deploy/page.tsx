@@ -4,9 +4,8 @@ import { AppHeader } from "@/components/app-header";
 export default function DeployPage() {
   return (
     <main className="sb-shell !max-w-[720px]">
-      <AppHeader badge="Deploy" />
+      <AppHeader title="Phone access" />
       <header className="sb-rise mb-6">
-        <h1 className="sb-brand text-4xl tracking-tight">Phone access</h1>
         <p className="mt-2 text-ink-soft">
           Run on an xAI Tailscale host, Funnel it — personal phones need no
           Tailscale app.

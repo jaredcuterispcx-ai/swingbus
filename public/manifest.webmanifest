@@ -1,14 +1,14 @@
 {
-  "name": "Swing Bus",
-  "short_name": "Swing Bus",
-  "description": "XSI shuttle ground control — passenger and driver",
+  "name": "swingbus",
+  "short_name": "swingbus",
+  "description": "Campus shuttles — pick your stop, see the next bus.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#050507",
-  "theme_color": "#050507",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "icons": [
     {
-      "src": "/xsi-mark.svg",
+      "src": "/bolt.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"

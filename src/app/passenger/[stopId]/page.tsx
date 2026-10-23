@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/app-header";
-import { nextShuttleForStop, shuttlesForStop } from "@/lib/fleet";
+import { BoltGlyph } from "@/components/brand";
+import { ChevronIcon, PinIcon, TripDots, UsersIcon } from "@/components/icons";
+import { MiniMap } from "@/components/mini-map";
+import { shuttlesForStop } from "@/lib/fleet";
 import { stopName, useAppState } from "@/lib/use-app-state";
 
 const PARTY_KEY = "swingbus.partyId";
@@ -33,24 +36,17 @@ export default function PassengerStopPage() {
   const myParty = state?.parties.find(
     (p) =>
       p.id === partyId &&
-      (p.status === "waiting" ||
-        p.status === "cleared" ||
-        p.status === "boarding"),
+      (p.status === "waiting" || p.status === "cleared" || p.status === "boarding"),
   );
-
   const waiting = Boolean(myParty && myParty.stopId === stopId);
 
   const fleet = useMemo(
     () => (state && stopId ? shuttlesForStop(state, stopId) : []),
     [state, stopId],
   );
-  const next = useMemo(
-    () => (state && stopId ? nextShuttleForStop(state, stopId) : null),
-    [state, stopId],
-  );
+  const next = fleet[0] ?? null;
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function submit() {
     setSubmitting(true);
     setFormError(null);
     try {
@@ -80,171 +76,221 @@ export default function PassengerStopPage() {
     });
     localStorage.removeItem(PARTY_KEY);
     setPartyId(null);
+    setDestinationId("");
     await refresh();
   }
 
-  return (
-    <main className="sb-shell">
-      <AppHeader backHref="/" backLabel="Home" badge="Ride" />
+  const activeVehicles = (state?.vehicles ?? [])
+    .filter((v) => v.active)
+    .map((v) => ({ ...v, highlight: v.id === next?.vehicle.id }));
 
-      {loading && <p className="text-sm text-ink-soft">Loading…</p>}
-      {error && (
-        <p className="mb-4 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">
-          {error}
-        </p>
-      )}
+  if (loading) {
+    return (
+      <main className="sb-shell">
+        <AppHeader />
+        <div className="h-48 animate-pulse rounded-xl bg-foam" />
+      </main>
+    );
+  }
 
-      {!loading && !stop && (
-        <div className="sb-panel">
-          <h1 className="sb-brand text-3xl">Unknown stop</h1>
-          <Link href="/" className="sb-btn sb-btn-primary mt-4 inline-flex">
-            Pick a stop
-          </Link>
-        </div>
-      )}
+  if (!stop) {
+    return (
+      <main className="sb-shell">
+        <AppHeader />
+        {error ? (
+          <p className="text-sm text-danger">{error}</p>
+        ) : (
+          <>
+            <h1 className="sb-brand text-3xl">Stop not found</h1>
+            <Link href="/" className="sb-btn sb-btn-primary mt-5 w-full">
+              Choose a stop
+            </Link>
+          </>
+        )}
+      </main>
+    );
+  }
 
-      {stop && !waiting && (
-        <>
-          <header className="sb-rise mb-5">
-            <p className="sb-chip">Pickup · {stop.shortCode}</p>
-            <h1 className="sb-brand mt-1 text-4xl tracking-tight">{stop.name}</h1>
-            <p className="mt-2 text-sm text-ink-soft">{stop.description}</p>
-          </header>
+  if (waiting && myParty) {
+    const cleared = myParty.status === "cleared" || myParty.status === "boarding";
+    return (
+      <main className="sb-shell">
+        <AppHeader />
+        <MiniMap
+          stops={state?.stops ?? []}
+          vehicles={activeVehicles}
+          pickupId={stopId}
+          destinationId={myParty.destinationId}
+          height={220}
+        />
 
-          <form onSubmit={submit} className="sb-panel sb-rise space-y-4">
-            <label className="block space-y-1.5">
-              <span className="text-xs font-semibold tracking-wide uppercase opacity-70">
-                Destination
-              </span>
-              <select
-                className="sb-select"
-                required
-                value={destinationId}
-                onChange={(e) => setDestinationId(e.target.value)}
-              >
-                <option value="">Where are you going?</option>
-                {destinations.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block space-y-1.5">
-              <span className="text-xs font-semibold tracking-wide uppercase opacity-70">
-                Passengers
-              </span>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  className="sb-btn sb-btn-ghost px-4"
-                  onClick={() => setPartySize((n) => Math.max(1, n - 1))}
-                >
-                  −
-                </button>
-                <div className="sb-brand flex-1 text-center text-3xl">{partySize}</div>
-                <button
-                  type="button"
-                  className="sb-btn sb-btn-ghost px-4"
-                  onClick={() => setPartySize((n) => Math.min(12, n + 1))}
-                >
-                  +
-                </button>
-              </div>
-            </label>
-
-            {formError && <p className="text-sm text-danger">{formError}</p>}
-
-            <button
-              type="submit"
-              className="sb-btn sb-btn-accent w-full"
-              disabled={submitting || !destinationId}
-            >
-              {submitting ? "Requesting…" : "Request ride"}
-            </button>
-          </form>
-        </>
-      )}
-
-      {stop && waiting && myParty && (
-        <div className="space-y-3">
-          <section className="sb-panel sb-rise">
-            <p className="sb-chip">Waiting at {stop.shortCode}</p>
-            <h1 className="sb-brand mt-1 text-3xl tracking-tight">
-              {myParty.partySize} → {stopName(state, myParty.destinationId)}
-            </h1>
-            <p className="mt-2 text-sm text-ink-soft">
-              {myParty.status === "cleared"
-                ? "A shuttle has been cleared to you."
-                : "You’re in the queue."}
-            </p>
-            {next && (
-              <div className="mt-4 rounded-xl border border-leaf/35 bg-leaf/10 px-3 py-3">
-                <p className="text-xs font-semibold tracking-wide text-leaf uppercase">
-                  Next to you
+        <section className="sb-rise -mt-4 relative rounded-2xl bg-white px-1 pt-5">
+          {next ? (
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <p className="sb-brand text-3xl">
+                  {next.etaMinutes != null ? `${next.etaMinutes} min` : "On the way"}
                 </p>
-                <p className="sb-brand text-2xl">{next.vehicle.callsign}</p>
-                <p className="text-sm text-ink-soft">
-                  {next.etaMinutes != null
-                    ? `~${next.etaMinutes} min`
-                    : "ETA pending"}
-                  {" · "}
-                  {next.seatsFree} seats free
-                  {" · "}
-                  {next.reason}
+                <p className="mt-0.5 truncate text-ink-soft">
+                  {cleared ? `${next.vehicle.callsign} is coming` : `${next.vehicle.callsign} is closest`}
                 </p>
               </div>
-            )}
-            <button
-              type="button"
-              className="sb-btn sb-btn-ghost mt-3 w-full text-sm"
-              onClick={() => void cancelWait()}
-            >
-              Cancel request
-            </button>
-          </section>
+              <span className="sb-pill sb-pill-dark shrink-0">
+                <BoltGlyph size={14} />
+                {next.vehicle.callsign}
+              </span>
+            </div>
+          ) : (
+            <div>
+              <p className="sb-brand text-3xl">Waiting</p>
+              <p className="mt-0.5 text-ink-soft">No shuttles online yet</p>
+            </div>
+          )}
 
-          <section className="sb-panel sb-rise sb-rise-delay-1">
-            <h2 className="sb-brand text-xl">All shuttles</h2>
-            <p className="mt-1 text-sm text-ink-soft">
-              Live fleet — which is coming to {stop.name}
-            </p>
-            {fleet.length === 0 ? (
-              <p className="mt-3 text-sm text-ink-soft">
-                No shuttles online yet. Stay here — the board updates live.
-              </p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {fleet.map((row, i) => (
-                  <li
-                    key={row.vehicle.id}
-                    className={`rounded-xl border px-3 py-2.5 ${
-                      row.comingHere || i === 0
-                        ? "border-leaf/40 bg-leaf/10"
-                        : "border-[var(--line)]"
-                    }`}
-                  >
-                    <div className="flex items-baseline justify-between gap-2">
-                      <p className="sb-brand text-lg">{row.vehicle.callsign}</p>
-                      <p className="font-mono text-sm text-leaf">
-                        {row.etaMinutes != null
-                          ? `~${row.etaMinutes} min`
-                          : "—"}
-                      </p>
-                    </div>
-                    <p className="text-xs text-ink-soft">
-                      {row.seatsFree} free
-                      {row.headingName ? ` · → ${row.headingName}` : ""}
-                      {" · "}
-                      {row.reason}
-                      {i === 0 ? " · next" : ""}
-                    </p>
+          <div className="mt-5 flex gap-3 rounded-xl bg-foam p-3.5">
+            <TripDots />
+            <div className="min-w-0 flex-1 space-y-4">
+              <p className="truncate font-semibold">{stop.name}</p>
+              <p className="truncate font-semibold">{stopName(state, myParty.destinationId)}</p>
+            </div>
+            <span className="flex items-center gap-1 self-center text-sm font-semibold">
+              <UsersIcon size={16} />
+              {myParty.partySize}
+            </span>
+          </div>
+
+          {fleet.length > 1 && (
+            <>
+              <h2 className="sb-brand mt-6 mb-1 text-lg">All shuttles</h2>
+              <ul>
+                {fleet.map((row) => (
+                  <li key={row.vehicle.id} className="sb-row cursor-default">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-black">
+                      <BoltGlyph size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">{row.vehicle.callsign}</span>
+                      <span className="block truncate text-sm text-ink-soft">
+                        {row.comingHere
+                          ? "Coming here"
+                          : row.headingName
+                            ? `→ ${row.headingName}`
+                            : `${row.seatsFree} seats`}
+                      </span>
+                    </span>
+                    <span className="font-semibold tabular-nums">
+                      {row.etaMinutes != null ? `${row.etaMinutes} min` : "—"}
+                    </span>
                   </li>
                 ))}
               </ul>
+            </>
+          )}
+
+          <button
+            type="button"
+            className="sb-btn sb-btn-ghost mt-6 w-full"
+            onClick={() => void cancelWait()}
+          >
+            Cancel ride
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  const dest = destinations.find((d) => d.id === destinationId);
+
+  return (
+    <main className="sb-shell flex flex-col">
+      <AppHeader />
+
+      <div className="mb-4 flex gap-3 rounded-xl bg-foam p-3.5">
+        <TripDots />
+        <div className="min-w-0 flex-1 space-y-4">
+          <p className="truncate font-semibold">{stop.name}</p>
+          {dest ? (
+            <button
+              type="button"
+              className="block w-full truncate text-left font-semibold"
+              onClick={() => setDestinationId("")}
+            >
+              {dest.name}
+            </button>
+          ) : (
+            <p className="font-semibold text-ink-soft">Where to?</p>
+          )}
+        </div>
+      </div>
+
+      {!dest ? (
+        <ul className="sb-rise">
+          {destinations.map((s) => (
+            <li key={s.id}>
+              <button type="button" className="sb-row" onClick={() => setDestinationId(s.id)}>
+                <span className="sb-icon-btn size-10">
+                  <PinIcon />
+                </span>
+                <span className="min-w-0 flex-1 truncate font-semibold">{s.name}</span>
+                <span className="text-ink-soft">
+                  <ChevronIcon />
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="sb-rise flex flex-1 flex-col">
+          <MiniMap
+            stops={state?.stops ?? []}
+            vehicles={activeVehicles}
+            pickupId={stopId}
+            destinationId={destinationId}
+            height={200}
+          />
+          <div className="mt-5 flex items-center justify-between">
+            <span className="flex items-center gap-2 font-semibold">
+              <UsersIcon /> Riders
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Fewer riders"
+                className="sb-icon-btn text-xl font-semibold"
+                disabled={partySize <= 1}
+                onClick={() => setPartySize((n) => Math.max(1, n - 1))}
+              >
+                −
+              </button>
+              <span className="sb-brand w-10 text-center text-2xl tabular-nums">{partySize}</span>
+              <button
+                type="button"
+                aria-label="More riders"
+                className="sb-icon-btn text-xl font-semibold"
+                disabled={partySize >= 12}
+                onClick={() => setPartySize((n) => Math.min(12, n + 1))}
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          <div className="sb-sticky-cta mt-auto">
+            {next?.etaMinutes != null && (
+              <p className="mb-2 text-center text-sm font-medium text-ink-soft">
+                Next shuttle in {next.etaMinutes} min
+              </p>
             )}
-          </section>
+            {formError && <p className="mb-2 text-center text-sm text-danger">{formError}</p>}
+            <button
+              type="button"
+              className="sb-btn sb-btn-primary sb-btn-lg w-full"
+              disabled={submitting}
+              onClick={() => void submit()}
+            >
+              {submitting ? "Requesting…" : "Request swingbus"}
+            </button>
+          </div>
         </div>
       )}
     </main>
