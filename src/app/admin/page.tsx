@@ -282,14 +282,17 @@ function StopEditor({
     e.preventDefault();
     setBusy(true);
     setError(null);
+    // Enter submits without blurring, so a typed pair may not have been split yet.
+    const pair = splitPair(draft.lat) ?? splitPair(draft.lng);
+    if (pair) set({ lat: pair[0], lng: pair[1] });
     try {
       const body = {
         name: draft.name,
         shortCode: draft.shortCode,
         description: draft.description,
         service: draft.service || null,
-        lat: draft.lat,
-        lng: draft.lng,
+        lat: pair ? pair[0] : draft.lat,
+        lng: pair ? pair[1] : draft.lng,
         arrivalRadiusM: draft.arrivalRadiusM || null,
       };
       if (stop) await send("PATCH", { id: stop.id, ...body });
@@ -401,13 +404,13 @@ function StopEditor({
             {accuracy > 50 ? " — step outside or wait a moment and try again" : ""}
           </p>
         )}
+        {/* No inputMode="decimal": the iOS decimal keypad has no minus key or comma. */}
         <div className="grid grid-cols-2 gap-3">
           <label className="block space-y-1.5">
             <span className="text-[11px] text-ink-soft">Latitude</span>
             <input
               className="sb-input font-mono"
               required
-              inputMode="decimal"
               value={draft.lat}
               {...coordHandlers("lat")}
               placeholder="35.0012"
@@ -418,7 +421,6 @@ function StopEditor({
             <input
               className="sb-input font-mono"
               required
-              inputMode="decimal"
               value={draft.lng}
               {...coordHandlers("lng")}
               placeholder="-90.0145"
