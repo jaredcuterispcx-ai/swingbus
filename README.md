@@ -65,8 +65,10 @@ That Funnel URL works on cellular. Print QRs from `/stops` **on that hostname**.
 
 ## API
 
-- `GET /api/state` — parties, vehicles (+ `seats` ledger), clearances  
-- `POST /api/parties` — passenger seat request  
+- `GET /api/state` — signed-in drivers and admins get the full state: parties, vehicles (+ `seats` ledger), clearances, events. Everyone else gets the passenger feed: stops, shuttles in service (position, next stop, free seats), which shuttle is coming to which stop, and their own ride  
+- `POST /api/parties` — passenger seat request; sets the http-only `sb_ride` cookie holding that ride's cancel token. One open request per phone, 60 requests a minute per IP  
+- `PATCH /api/parties` `{action: "cancel", id}` — needs the requesting phone's `sb_ride` cookie or a driver/admin session; only waiting or cleared rides  
+- `POST /api/auth` — sign in; 10 tries a minute per IP (wrong passwords only), then a 10-minute wait  
 - `POST|PATCH /api/vehicles` — register, GPS, accept clearance  
 - `POST /api/board` — board / alight against the ledger  
 - `GET /api/dispatch` — ground-control snapshot  

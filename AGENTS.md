@@ -40,6 +40,10 @@ Name is always lowercase, even at the start of a sentence: **swingbus** (never "
 
 - Next.js 15 App Router + TypeScript + Tailwind v4. No database: state lives in `data/store.json` (gitignored), written through a serialized write chain in `src/lib/store.ts`.
 - Clients poll `GET /api/state` (2–8 s depending on page).
+- Anonymous `GET /api/state` returns only the passenger feed (`publicState` in `src/lib/feed.ts`): stops, shuttles in service (position, current and next stop, free seats), which shuttle is coming to which stop, and the phone's own ride. No other riders' requests, free text, events or offline shuttles. Signed-in drivers and admins get the full state (`staffState`). Pages read it with `useAppState` (passenger feed) or `useStaffState` (full state).
+- Requesting a ride sets an http-only `sb_ride` cookie (path `/api`, one day) holding that ride's cancel token; only its SHA-256 is stored (`src/lib/ride-token.ts`). Cancelling needs that cookie or a driver/admin session, and only waiting or cleared rides can be cancelled. A phone gets one open request at a time.
+- Per-IP limits (`src/lib/rate-limit.ts`, in memory, keyed on `CF-Connecting-IP`, else the nearest `X-Forwarded-For` hop): `POST /api/parties` 60 a minute; `POST /api/auth` 10 wrong passwords a minute, then a 10-minute wait. They match the planned Cloudflare rules.
+- Delivered and cancelled requests are deleted 3 hours after they close (`CLOSED_RIDE_RETENTION_MS` in `store.ts`).
 - Fonts are bundled via `@fontsource-variable/*`. Do **not** switch back to `next/font/google`: it downloads at boot and failing downloads took the whole app down.
 - Custom CSS classes (`sb-*`) live in `@layer components`, base resets in `@layer base`, so Tailwind utilities can override them. Unlayered rules beat utilities — that bug once hid button labels.
 
@@ -49,6 +53,9 @@ Key modules (`src/lib/`):
 |------|------|
 | `types.ts` | Stop, PassengerParty, Vehicle, Clearance, BoardingEvent, AppState |
 | `store.ts` | Persistence, migrations (`SCHEMA_VERSION`), all mutations incl. stop CRUD |
+| `feed.ts` | What `GET /api/state` returns: the passenger feed (`publicState`) or the full state for staff (`staffState`) |
+| `ride-token.ts` | Rider cancel tokens: the `sb_ride` cookie, hashing, finding a phone's ride |
+| `rate-limit.ts` | In-memory per-IP limits for sign-in and ride requests |
 | `dispatch.ts` | Ground-control routing: issues clearances (seat holds) to the nearest vehicle with room |
 | `seats.ts` | Seat ledger: `available = capacity − occupied − reserved` |
 | `fleet.ts` | Per-stop ranking of shuttles + ETA (haversine, ~22 km/h) for the waiting view |
@@ -93,4 +100,5 @@ Phones off the corporate network: run on a stable internal host and expose it wi
 
 - Restart the dev server with `pkill -f next-server` (the `dev-forever.sh` loop brings it back); Ctrl-C in its tmux pane kills the loop.
 - Admin lat/lng inputs split a pasted "lat, lng" pair only on paste or blur — never in `onChange`, or typing gets mangled.
+- Scripts that read `parties` from `GET /api/state` need a driver or admin `sb_session` cookie; anonymous calls get the passenger feed. Rate limits live in the server process and reset on restart; give each simulated phone its own `CF-Connecting-IP` so tests don't trip each other's limits.
 - Deleting a stop is refused while riders reference it, and at least 2 stops must remain.

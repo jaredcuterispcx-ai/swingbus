@@ -7,7 +7,7 @@ import { SignOutButton } from "@/components/sign-out";
 import { randomElectricCallsign } from "@/lib/callsigns";
 import { formatDistance, stopsByDistance } from "@/lib/geo";
 import type { VehicleWithSeats } from "@/lib/use-app-state";
-import { stopName, useAppState } from "@/lib/use-app-state";
+import { stopName, useStaffState } from "@/lib/use-app-state";
 
 const VEHICLE_KEY = "swingbus.vehicleId";
 
@@ -19,7 +19,7 @@ type PickupGroup = {
 };
 
 export default function DriverPage() {
-  const { state, loading, error, refresh } = useAppState(2500);
+  const { state, loading, error, refresh } = useStaffState(2500);
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [callsign, setCallsign] = useState("");
   const [capacity, setCapacity] = useState(14);

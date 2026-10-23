@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { allocateCallsign, normalizeCallsign, takenCallsigns } from "./callsigns";
 import { refreshGroundControl } from "./dispatch";
 import { stopAt } from "./geo";
+import { hashCancelToken, newCancelToken, rideForToken } from "./ride-token";
 import { seatLedger } from "./seats";
 import { DEFAULT_STOPS } from "./stops";
 import type {
@@ -20,7 +21,19 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "store.json");
 export const SCHEMA_VERSION = 3;
 
+/** Delivered and cancelled requests are deleted this long after they close. */
+export const CLOSED_RIDE_RETENTION_MS = 3 * 60 * 60 * 1000;
+
 let writeChain: Promise<void> = Promise.resolve();
+
+/** A ride request the API should refuse with this HTTP status. */
+export class RideError extends Error {
+  status: 403 | 409;
+  constructor(status: 403 | 409, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
 
 function emptyState(stops: Stop[] = DEFAULT_STOPS): AppState {
   return {
@@ -107,6 +120,16 @@ function pruneOrphanParties(state: AppState): AppState {
   };
 }
 
+function pruneClosedParties(state: AppState): AppState {
+  const cutoff = Date.now() - CLOSED_RIDE_RETENTION_MS;
+  const parties = state.parties.filter(
+    (p) =>
+      (p.status !== "delivered" && p.status !== "cancelled") ||
+      Date.parse(p.updatedAt) > cutoff,
+  );
+  return parties.length === state.parties.length ? state : { ...state, parties };
+}
+
 async function ensureStore(): Promise<AppState> {
   await fs.mkdir(DATA_DIR, { recursive: true });
   let text: string;
@@ -125,7 +148,7 @@ async function ensureStore(): Promise<AppState> {
   let state = migrate(raw);
   state.schemaVersion = SCHEMA_VERSION;
   const before = state.parties.length;
-  state = pruneOrphanParties(state);
+  state = pruneClosedParties(pruneOrphanParties(state));
   if (migrated || state.parties.length !== before) {
     await persist(state);
   }
@@ -192,8 +215,15 @@ export async function createParty(input: {
   partySize: number;
   note?: string;
   contactHint?: string;
-}): Promise<PassengerParty> {
+  /** The cancel token this phone already holds; a phone gets one open request at a time. */
+  heldCancelToken?: string;
+}): Promise<{ party: PassengerParty; cancelToken: string }> {
   return withWrite(async (state) => {
+    const held = rideForToken(state.parties, input.heldCancelToken);
+    if (held && ["waiting", "cleared", "boarding"].includes(held.status)) {
+      const from = state.stops.find((s) => s.id === held.stopId)?.name ?? "another stop";
+      throw new RideError(409, `You already have a ride from ${from}. Cancel it first.`);
+    }
     if (!state.stops.some((s) => s.id === input.stopId)) {
       throw new Error("Unknown pickup stand");
     }
@@ -205,6 +235,7 @@ export async function createParty(input: {
     }
     const partySize = Math.min(12, Math.max(1, Math.floor(input.partySize)));
     const now = new Date().toISOString();
+    const cancelToken = newCancelToken();
     const party: PassengerParty = {
       id: randomUUID(),
       stopId: input.stopId,
@@ -217,6 +248,7 @@ export async function createParty(input: {
       updatedAt: now,
       note: input.note?.slice(0, 120),
       contactHint: input.contactHint?.slice(0, 40),
+      cancelTokenHash: hashCancelToken(cancelToken),
     };
     let next: AppState = {
       ...state,
@@ -225,14 +257,28 @@ export async function createParty(input: {
     };
     next = refreshGroundControl(next);
     await persist(next);
-    return next.parties.find((p) => p.id === party.id)!;
+    return { party: next.parties.find((p) => p.id === party.id)!, cancelToken };
   });
 }
 
-export async function cancelParty(id: string): Promise<PassengerParty | null> {
+/** Riders cancel with their phone's cancel token; drivers and admins with their session. */
+export async function cancelParty(
+  id: string,
+  by: { staff: boolean; cancelToken?: string },
+): Promise<PassengerParty | null> {
   return withWrite(async (state) => {
     const idx = state.parties.findIndex((p) => p.id === id);
     if (idx < 0) return null;
+    const party = state.parties[idx];
+    const requester =
+      by.cancelToken !== undefined && party.cancelTokenHash === hashCancelToken(by.cancelToken);
+    if (!by.staff && !requester) {
+      throw new RideError(403, "Only the phone that requested this ride can cancel it");
+    }
+    if (party.status === "cancelled") return party;
+    if (party.status !== "waiting" && party.status !== "cleared") {
+      throw new RideError(409, "This ride has already been picked up");
+    }
     const now = new Date().toISOString();
     const updated: PassengerParty = {
       ...state.parties[idx],

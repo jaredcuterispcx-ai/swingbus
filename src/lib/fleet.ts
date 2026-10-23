@@ -1,6 +1,6 @@
 import { haversineKm } from "./dispatch";
-import { seatLedger } from "./seats";
-import type { AppState, Stop, Vehicle } from "./types";
+import type { PublicState, PublicVehicle } from "./feed";
+import type { Stop } from "./types";
 
 const AVG_SHUTTLE_KMH = 22;
 
@@ -9,7 +9,7 @@ function stopById(stops: Stop[], id: string | null | undefined) {
   return stops.find((s) => s.id === id) ?? null;
 }
 
-function vehiclePosition(vehicle: Vehicle, stops: Stop[]) {
+function vehiclePosition(vehicle: PublicVehicle, stops: Stop[]) {
   if (vehicle.lat != null && vehicle.lng != null) {
     return { lat: vehicle.lat, lng: vehicle.lng };
   }
@@ -19,7 +19,7 @@ function vehiclePosition(vehicle: Vehicle, stops: Stop[]) {
 }
 
 export type ShuttleArrival = {
-  vehicle: Vehicle;
+  vehicle: PublicVehicle;
   seatsFree: number;
   etaMinutes: number | null;
   headingName: string | null;
@@ -27,9 +27,11 @@ export type ShuttleArrival = {
   reason: string;
 };
 
+type Fleet = Pick<PublicState, "stops" | "vehicles" | "clearances">;
+
 /** All active shuttles ranked for a passenger waiting at `stopId`. */
 export function shuttlesForStop(
-  state: AppState,
+  state: Fleet,
   stopId: string,
 ): ShuttleArrival[] {
   const stop = stopById(state.stops, stopId);
@@ -50,7 +52,6 @@ export function shuttlesForStop(
   const rows: ShuttleArrival[] = state.vehicles
     .filter((v) => v.active)
     .map((v) => {
-      const seats = seatLedger(state, v);
       const pos = vehiclePosition(v, state.stops);
       let etaMinutes: number | null = null;
       if (pos) {
@@ -67,7 +68,7 @@ export function shuttlesForStop(
 
       return {
         vehicle: v,
-        seatsFree: seats.available,
+        seatsFree: v.seats.available,
         etaMinutes,
         headingName: heading?.name ?? null,
         comingHere,
@@ -86,6 +87,6 @@ export function shuttlesForStop(
   return rows;
 }
 
-export function nextShuttleForStop(state: AppState, stopId: string) {
+export function nextShuttleForStop(state: Fleet, stopId: string) {
   return shuttlesForStop(state, stopId)[0] ?? null;
 }
