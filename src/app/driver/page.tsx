@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { PinIcon, UsersIcon } from "@/components/icons";
+import { SignOutButton } from "@/components/sign-out";
 import { randomElectricCallsign } from "@/lib/callsigns";
 import { formatDistance, stopsByDistance } from "@/lib/geo";
 import type { VehicleWithSeats } from "@/lib/use-app-state";
@@ -413,6 +414,10 @@ export default function DriverPage() {
             >
               {busy ? "…" : "GO"}
             </button>
+
+            <div className="mt-10">
+              <SignOutButton />
+            </div>
           </form>
         )
       ) : (

@@ -23,7 +23,9 @@ Name is always lowercase, even at the start of a sentence: **swingbus** (never "
 4. Driver logs who they picked up at each stop: one or more groups, each = passenger count + destination.
 5. Location-aware: within a stop's arrival radius (75 m default, per-stop override) the phone is "at" that stop; pickup stop auto-fills, stop lists sort nearest-first.
 
-**Admin** (`/admin`): rename, move, add, delete stops; persisted. "Use my location" while standing at a curb, or paste `lat, lng`. Optional `ADMIN_PIN` env var gates edits.
+**Admin** (`/admin`): rename, move, add, delete stops; persisted. "Use my location" while standing at a curb, or paste `lat, lng`. 
+
+**Passwords**: `/driver` needs "swingbus-driver"; `/dispatch` and `/admin` need "swingbus-admin" (admin also opens driver). Enforced in `src/middleware.ts` for pages and mutating APIs via signed cookies (`src/lib/auth.ts`); overridable with `DRIVER_PASSWORD` / `ADMIN_PASSWORD` / `AUTH_SECRET`. Passenger pages and reads stay public.
 
 ## Design direction
 
@@ -81,4 +83,4 @@ Phones off the corporate network: run on a stable internal host and expose it wi
 - Real lat/lng for every stop (product owner offered to provide them).
 - Use the onsite/offsite tags: only offer offsite stops in service windows; tag shuttles as onsite vs offsite.
 - Durable hosting (internal host + Funnel, or a managed host). `data/store.json` needs a persistent volume wherever it runs.
-- No auth beyond the optional admin PIN.
+- Auth is shared passwords only (no per-person accounts or audit trail); default passwords live in source, so set env overrides in production.

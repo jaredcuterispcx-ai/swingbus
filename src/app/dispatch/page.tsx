@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { AppHeader } from "@/components/app-header";
 import { MiniMap } from "@/components/mini-map";
+import { SignOutButton } from "@/components/sign-out";
 import { stopName, useAppState, type VehicleWithSeats } from "@/lib/use-app-state";
 
 export default function GroundControlPage() {
@@ -72,6 +73,7 @@ export default function GroundControlPage() {
           <button type="button" className="sb-btn sb-btn-ghost text-sm" onClick={resetDemo}>
             Reset
           </button>
+          <SignOutButton className="sb-btn sb-btn-ghost text-sm" />
         </div>
       </header>
 

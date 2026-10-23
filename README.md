@@ -2,7 +2,16 @@
 
 Airport-style **ground control** for XSI / MEM campus shuttles (Macroharder + offsite lots). Passengers request **seats** at a stand; vehicles publish **capacity**; the board holds seats via **clearances** and routes the nearest bus with free capacity — like a tower for buses.
 
-Stops start from the MEM shuttle sheet (`src/lib/stops.ts`) and are then managed at `/admin`: rename, move (including "use my current location" while standing at the curb), add, or delete stops. Edits persist in `data/store.json`. Set `ADMIN_PIN` to require a PIN for stop edits.
+Stops start from the MEM shuttle sheet (`src/lib/stops.ts`) and are then managed at `/admin`: rename, move (including "use my current location" while standing at the curb), add, or delete stops. Edits persist in `data/store.json`.
+
+## Passwords
+
+| Area | Default password | Env override |
+|------|------------------|--------------|
+| `/driver` (+ driver APIs) | `swingbus-driver` | `DRIVER_PASSWORD` |
+| `/dispatch`, `/admin` (+ stop/demo APIs) | `swingbus-admin` | `ADMIN_PASSWORD` |
+
+The admin password also opens the driver page. Sessions are signed, http-only cookies that last 30 days; changing a password (or setting `AUTH_SECRET`) signs everyone out. Passenger pages and `GET /api/state` stay public.
 
 Drivers' phones snap to a stop when they're inside its arrival radius (75 m by default, adjustable per stop in admin); the pickup stop auto-fills and stop lists sort nearest-first.
 
