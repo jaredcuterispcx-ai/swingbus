@@ -88,6 +88,9 @@ export default function GroundControlPage() {
           <Link href="/admin" className="sb-btn sb-btn-ghost text-sm">
             Edit stops
           </Link>
+          <Link href="/dispatch/qr" className="sb-btn sb-btn-ghost text-sm">
+            QR codes
+          </Link>
           <button type="button" className="sb-btn sb-btn-accent text-sm" onClick={seedDemo}>
             Demo data
           </button>

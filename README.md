@@ -27,9 +27,13 @@ See [docs/GROUND-CONTROL.md](docs/GROUND-CONTROL.md) for the seat ledger and lif
 | Passenger | `/passenger`, `/passenger/[stopId]` |
 | Driver / vehicle | `/driver` |
 | Ground control | `/dispatch` |
-| Stand QR sheet | `/stops` |
+| Printable QR codes (stops, driver) | `/dispatch/qr`, `/dispatch/qr/driver` |
 | Stop admin | `/admin` |
 | Phone deploy cheat-sheet | `/deploy` |
+
+## QR codes
+
+Ground control → **QR codes** prints one card per stop (four to a page, dashed cut lines) that opens that stop's pickup page, plus a driver code that opens `/driver`. Codes point at the address in the browser's address bar. Set `PUBLIC_URL` (e.g. `https://swingbus.example.com`) to pin them, or type a one-off address in the page's Public URL field. A code holds only that origin plus the page path, never a password or session token. Localhost addresses are refused, since phones can't open them. `/stops` redirects here.
 
 ## Seat math (drivers)
 
@@ -67,7 +71,7 @@ curl http://localhost:3000/api/health   # {"status":"ok",...}
 | `DRIVER_PASSWORD` | `swingbus-driver` in dev | **Required in production.** |
 | `ADMIN_PASSWORD` | `swingbus-admin` in dev | **Required in production.** Must differ from the driver password. |
 | `AUTH_SECRET` | derived in dev | **Required in production**, 32+ characters (`openssl rand -base64 32`). Signs session cookies. |
-| `PUBLIC_URL` | unset | Optional. Address printed QR codes point to, e.g. `https://swingbus.example.com`. Unset: the address ground control was opened at (`X-Forwarded-Host` / `X-Forwarded-Proto` first). Localhost is never used. |
+| `PUBLIC_URL` | unset | Optional. Address printed QR codes point to, e.g. `https://swingbus.example.com`. Unset: the address ground control was opened at. Localhost is never used. |
 | `DATA_DIR` | `/data` in the image, `./data` otherwise | Directory that holds `store.json` and its daily copies. |
 | `BACKUP_DAYS` | `14` | Daily copies of `store.json` to keep (`store.json.YYYY-MM-DD`, UTC date). `0` turns them off. |
 | `PORT` | `3000` in the image | Listen port. |
