@@ -21,6 +21,9 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "store.json");
 export const SCHEMA_VERSION = 3;
 
+/** Delivered and cancelled requests are deleted this long after they close. */
+export const CLOSED_RIDE_RETENTION_MS = 3 * 60 * 60 * 1000;
+
 let writeChain: Promise<void> = Promise.resolve();
 
 /** A ride request the API should refuse with this HTTP status. */
@@ -117,6 +120,16 @@ function pruneOrphanParties(state: AppState): AppState {
   };
 }
 
+function pruneClosedParties(state: AppState): AppState {
+  const cutoff = Date.now() - CLOSED_RIDE_RETENTION_MS;
+  const parties = state.parties.filter(
+    (p) =>
+      (p.status !== "delivered" && p.status !== "cancelled") ||
+      Date.parse(p.updatedAt) > cutoff,
+  );
+  return parties.length === state.parties.length ? state : { ...state, parties };
+}
+
 async function ensureStore(): Promise<AppState> {
   await fs.mkdir(DATA_DIR, { recursive: true });
   let text: string;
@@ -135,7 +148,7 @@ async function ensureStore(): Promise<AppState> {
   let state = migrate(raw);
   state.schemaVersion = SCHEMA_VERSION;
   const before = state.parties.length;
-  state = pruneOrphanParties(state);
+  state = pruneClosedParties(pruneOrphanParties(state));
   if (migrated || state.parties.length !== before) {
     await persist(state);
   }
