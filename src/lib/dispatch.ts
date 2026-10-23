@@ -246,7 +246,32 @@ export function applyClearances(
   };
 }
 
+/** Riders held for a shuttle that went offline wait again so another one can be cleared. */
+function releaseOfflineHolds(state: AppState): AppState {
+  const online = new Set(state.vehicles.filter((v) => v.active).map((v) => v.id));
+  let released = false;
+  const parties = state.parties.map((p) => {
+    if (
+      (p.status === "cleared" || p.status === "boarding") &&
+      p.vehicleId &&
+      !online.has(p.vehicleId)
+    ) {
+      released = true;
+      return {
+        ...p,
+        status: "waiting" as const,
+        vehicleId: null,
+        clearanceId: null,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    return p;
+  });
+  return released ? { ...state, parties } : state;
+}
+
 export function refreshGroundControl(state: AppState): AppState {
-  const clearances = computeClearances(state);
-  return applyClearances({ ...state, clearances }, clearances);
+  const live = releaseOfflineHolds(state);
+  const clearances = computeClearances(live);
+  return applyClearances({ ...live, clearances }, clearances);
 }
