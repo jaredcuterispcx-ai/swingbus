@@ -1,3 +1,4 @@
+import { minutesQuiet, partyCaps, presenceOf, type Presence } from "./lifecycle";
 import { activeClearances, seatLedger } from "./seats";
 import { serviceStatusByStop, type StopServiceStatus } from "./service-hours";
 import type {
@@ -6,21 +7,31 @@ import type {
   Clearance,
   PassengerParty,
   SeatLedger,
+  ShuttleService,
   Stop,
   StopId,
   Vehicle,
 } from "./types";
 
+/** Worked out on the server, so the feed never carries a shuttle's check-in times. */
+type PresenceFields = {
+  /** "stale" after 2 quiet minutes ("last seen"), "lost" once out of contact at 5. */
+  presence: Presence;
+  /** Whole minutes since the shuttle's phone last checked in. */
+  lastSeenMin: number;
+};
+
 export type PublicVehicle = Pick<
   Vehicle,
   "id" | "callsign" | "active" | "lat" | "lng" | "currentStopId" | "headingStopId" | "service"
-> & { seats: Pick<SeatLedger, "available"> };
+> &
+  PresenceFields & { seats: Pick<SeatLedger, "available"> };
 
 export type PublicClearance = Pick<Clearance, "vehicleId" | "stopId" | "status">;
 
 export type PublicRide = Pick<
   PassengerParty,
-  "id" | "stopId" | "destinationId" | "partySize" | "status" | "vehicleId"
+  "id" | "stopId" | "destinationId" | "partySize" | "status" | "vehicleId" | "cancelReason" | "updatedAt"
 >;
 
 /**
@@ -37,9 +48,15 @@ export interface PublicState {
   clearances: PublicClearance[];
   /** This phone's latest ride request, found by its cancel-token cookie. */
   ride: PublicRide | null;
+  /** Most riders one request may have: the biggest shuttle ground control can send, at most 12. */
+  maxPartySize: number;
+  /** The same cap counting only onsite or only offsite shuttles; `maxPartyForTrip` picks the one a trip needs. */
+  maxPartyByService: Record<ShuttleService, number>;
+  /** When the server took this snapshot; rider screens time how long ago their ride ended against it. */
+  updatedAt: string;
 }
 
-export type VehicleWithSeats = Vehicle & { seats: SeatLedger };
+export type VehicleWithSeats = Vehicle & PresenceFields & { seats: SeatLedger };
 
 export type StaffParty = Omit<PassengerParty, "cancelTokenHash">;
 
@@ -51,7 +68,10 @@ export interface StaffState extends PublicState {
   activeClearances: Clearance[];
   parties: StaffParty[];
   events: BoardingEvent[];
-  updatedAt: string;
+}
+
+function presenceFields(v: Vehicle, now: number): PresenceFields {
+  return { presence: presenceOf(v, now), lastSeenMin: minutesQuiet(v, now) };
 }
 
 export function publicRide(p: PassengerParty): PublicRide {
@@ -62,6 +82,8 @@ export function publicRide(p: PassengerParty): PublicRide {
     partySize: p.partySize,
     status: p.status,
     vehicleId: p.vehicleId,
+    cancelReason: p.cancelReason,
+    updatedAt: p.updatedAt,
   };
 }
 
@@ -72,6 +94,7 @@ export function staffParty(p: PassengerParty): StaffParty {
 }
 
 export function publicState(state: AppState, ride: PassengerParty | null): PublicState {
+  const now = Date.parse(state.updatedAt);
   return {
     stops: state.stops,
     serviceStatus: serviceStatusByStop(state.stops),
@@ -86,6 +109,7 @@ export function publicState(state: AppState, ride: PassengerParty | null): Publi
         currentStopId: v.currentStopId,
         headingStopId: v.headingStopId,
         service: v.service,
+        ...presenceFields(v, now),
         seats: { available: seatLedger(state, v).available },
       })),
     clearances: activeClearances(state).map((c) => ({
@@ -94,20 +118,28 @@ export function publicState(state: AppState, ride: PassengerParty | null): Publi
       status: c.status,
     })),
     ride: ride ? publicRide(ride) : null,
+    ...partyCaps(state.vehicles, now),
+    updatedAt: state.updatedAt,
   };
 }
 
 export function staffState(state: AppState, ride: PassengerParty | null): StaffState {
+  const now = Date.parse(state.updatedAt);
   return {
     schemaVersion: state.schemaVersion,
     stops: state.stops,
     serviceStatus: serviceStatusByStop(state.stops),
-    vehicles: state.vehicles.map((v) => ({ ...v, seats: seatLedger(state, v) })),
+    vehicles: state.vehicles.map((v) => ({
+      ...v,
+      ...presenceFields(v, now),
+      seats: seatLedger(state, v),
+    })),
     clearances: state.clearances,
     activeClearances: activeClearances(state),
     parties: state.parties.map(staffParty),
     events: state.events,
     ride: ride ? publicRide(ride) : null,
+    ...partyCaps(state.vehicles, now),
     updatedAt: state.updatedAt,
   };
 }

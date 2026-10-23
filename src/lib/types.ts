@@ -42,6 +42,8 @@ export interface PassengerParty {
   contactHint?: string;
   /** SHA-256 of the cancel token the requesting phone holds; never sent to any client. */
   cancelTokenHash?: string;
+  /** Set when the request was closed for the rider: nobody picked it up in time, or the driver couldn't find them. */
+  cancelReason?: "expired" | "no_show";
 }
 
 /**
@@ -67,6 +69,7 @@ export interface Vehicle {
   status: VehicleStatus;
   lat: number | null;
   lng: number | null;
+  /** Last check-in from the driver's phone (a GPS fix, or going back online); presence cutoffs run off it. */
   lastLocationAt: string | null;
   currentStopId: StopId | null;
   /** Where the driver is heading / routing toward */
@@ -106,7 +109,7 @@ export interface BoardingEvent {
   destinationId: StopId;
   partyIds: string[];
   seats: number;
-  kind: "board" | "alight";
+  kind: "board" | "alight" | "no_show";
   createdAt: string;
 }
 

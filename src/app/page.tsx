@@ -23,7 +23,7 @@ export default function HomePage() {
   const offered = rows.filter(({ stop }) => statusOf(state, stop.id).open);
   const closed = rows.filter(({ stop }) => !statusOf(state, stop.id).open);
 
-  const online = state?.vehicles.filter((v) => v.active).length ?? 0;
+  const online = state?.vehicles.filter((v) => v.active && v.presence !== "lost").length ?? 0;
 
   return (
     <main className="sb-shell">
@@ -37,7 +37,9 @@ export default function HomePage() {
       <div className="relative mb-5">
         <MiniMap
           stops={state?.stops ?? []}
-          vehicles={(state?.vehicles ?? []).filter((v) => v.active)}
+          vehicles={(state?.vehicles ?? [])
+            .filter((v) => v.active)
+            .map((v) => ({ ...v, faded: v.presence !== "live" }))}
           height={190}
         />
         <span className="sb-pill sb-pill-dark absolute bottom-3 left-3 text-xs">

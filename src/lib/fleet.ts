@@ -30,6 +30,15 @@ export type ShuttleArrival = {
 
 type Fleet = Pick<PublicState, "stops" | "vehicles" | "clearances">;
 
+/** Minutes for a shuttle to reach a stop from where it was last seen; null once it's out of contact. */
+export function etaToStop(stops: Stop[], vehicle: PublicVehicle, stopId: string): number | null {
+  const stop = stopById(stops, stopId);
+  const pos = vehiclePosition(vehicle, stops);
+  if (!stop || !pos || vehicle.presence === "lost") return null;
+  const km = haversineKm(pos, stop);
+  return Math.max(1, Math.round((km / AVG_SHUTTLE_KMH) * 60));
+}
+
 /**
  * Active shuttles that could take a rider from `stopId`, ranked: those that run
  * the trip once the destination is known, otherwise those that serve the stop.
@@ -65,16 +74,12 @@ export function shuttlesForStop(
             : servesStop(v.service, stop))),
     )
     .map((v) => {
-      const pos = vehiclePosition(v, state.stops);
-      let etaMinutes: number | null = null;
-      if (pos) {
-        const km = haversineKm(pos, stop);
-        etaMinutes = Math.max(1, Math.round((km / AVG_SHUTTLE_KMH) * 60));
-      }
+      const etaMinutes = etaToStop(state.stops, v, stopId);
       const comingHere = comingIds.has(v.id);
       const heading = stopById(state.stops, v.headingStopId);
       let reason = "On the network";
-      if (comingHere) reason = "Cleared to your stop";
+      if (v.presence === "lost") reason = "Out of contact";
+      else if (comingHere) reason = "Cleared to your stop";
       else if (v.headingStopId === stopId) reason = "Heading your way";
       else if (heading) reason = `Heading to ${heading.name}`;
       else if (etaMinutes != null) reason = "Nearest by GPS";
@@ -90,6 +95,8 @@ export function shuttlesForStop(
     });
 
   rows.sort((a, b) => {
+    const aLost = a.vehicle.presence === "lost";
+    if (aLost !== (b.vehicle.presence === "lost")) return aLost ? 1 : -1;
     if (a.comingHere !== b.comingHere) return a.comingHere ? -1 : 1;
     const ae = a.etaMinutes ?? 999;
     const be = b.etaMinutes ?? 999;
@@ -100,6 +107,7 @@ export function shuttlesForStop(
   return rows;
 }
 
+/** The shuttle a rider at `stopId` can expect next; never one that's out of contact. */
 export function nextShuttleForStop(state: Fleet, stopId: string) {
-  return shuttlesForStop(state, stopId)[0] ?? null;
+  return shuttlesForStop(state, stopId).find((row) => row.vehicle.presence !== "lost") ?? null;
 }

@@ -40,7 +40,7 @@ Name is always lowercase, even at the start of a sentence: **swingbus** (never "
 
 - Next.js 15 App Router + TypeScript + Tailwind v4. No database: state lives in `store.json` under `DATA_DIR` (default `data/`, gitignored; `/data` in the container), written through a serialized write chain in `src/lib/store.ts`. `persist()` writes a temp file and renames it over `store.json`, so a crash never leaves a half-written store. Missing file → built-in defaults; unreadable file → requests fail and the file is left alone, never reseeded over. `src/lib/backups.ts` (started by `src/instrumentation.ts`) keeps a dated daily copy beside it (`store.json.YYYY-MM-DD`, newest `BACKUP_DAYS`, default 14). The app must run as **exactly one process**: the state is one file behind an in-process lock, so no horizontal scaling and no serverless.
 - Clients poll `GET /api/state` (2–8 s depending on page).
-- Anonymous `GET /api/state` returns only the passenger feed (`publicState` in `src/lib/feed.ts`): stops with their `serviceStatus`, shuttles in service (position, current and next stop, onsite or offsite, free seats), which shuttle is coming to which stop, and the phone's own ride. No other riders' requests, free text, events or offline shuttles. Signed-in drivers and admins get the full state (`staffState`). Pages read it with `useAppState` (passenger feed) or `useStaffState` (full state).
+- Anonymous `GET /api/state` returns only the passenger feed (`publicState` in `src/lib/feed.ts`): stops with their `serviceStatus`, shuttles in service (position, current and next stop, onsite or offsite, free seats, and presence worked out on the server: `presence` live/stale/lost plus `lastSeenMin`, never their check-in times), which shuttle is coming to which stop, `maxPartySize` and `maxPartyByService` (never capacities), the snapshot's `updatedAt`, and the phone's own ride (with `cancelReason` and `updatedAt`). No other riders' requests, free text, events or offline shuttles. Signed-in drivers and admins get the full state (`staffState`). Pages read it with `useAppState` (passenger feed) or `useStaffState` (full state).
 - Requesting a ride sets an http-only `sb_ride` cookie (path `/api`, one day) holding that ride's cancel token; only its SHA-256 is stored (`src/lib/ride-token.ts`). Cancelling needs that cookie or a driver/admin session, and only waiting or cleared rides can be cancelled. A phone gets one open request at a time.
 - Per-IP limits (`src/lib/rate-limit.ts`, in memory, keyed on `CF-Connecting-IP`, else the nearest `X-Forwarded-For` hop): `POST /api/parties` 60 a minute; `POST /api/auth` 10 wrong passwords a minute, then a 10-minute wait. They match the planned Cloudflare rules.
 - Delivered and cancelled requests are deleted 3 hours after they close (`CLOSED_RIDE_RETENTION_MS` in `store.ts`).
@@ -58,6 +58,7 @@ Key modules (`src/lib/`):
 | `ride-token.ts` | Rider cancel tokens: the `sb_ride` cookie, hashing, finding a phone's ride |
 | `rate-limit.ts` | In-memory per-IP limits for sign-in and ride requests |
 | `dispatch.ts` | Ground-control routing: issues clearances (seat holds) to the nearest vehicle with room that runs the trip's service |
+| `lifecycle.ts` | Time rules run on every refresh: shuttle presence off `lastLocationAt` (last seen 2 min, out of contact 5, offline 30), requests lapse at 30 min; party cap, counting only shuttles that run the trip (`maxPartyForTrip`); nearest drop-off for the heading (`docs/GROUND-CONTROL.md`) |
 | `seats.ts` | Seat ledger: `available = capacity − occupied − reserved` |
 | `fleet.ts` | Per-stop ranking of the shuttles that could take the rider + ETA (haversine, ~22 km/h) for the waiting view |
 | `geo.ts` | Distances, arrival radius, nearest stop |
@@ -107,7 +108,7 @@ Phones reach swingbus over a public HTTPS hostname (driver GPS needs HTTPS). Tai
 - Durable hosting: the image is ready (see Running and `DEPLOY.md`); the xAI host, public hostname and secrets are being set up outside this repo. Wherever it runs: one instance and a persistent volume at `/data`.
 - Auth is shared passwords only (no per-person accounts or audit trail). Production refuses to run on the public defaults.
 - GitHub (`jaredcuterispcx-ai/swingbus`): the original build environment had no write credentials, so `main` there may still be just the initial README commit. Branch `cursor/github-main-db12` holds this code merged onto that initial commit (unrelated histories already joined) and can be pushed straight to `main`.
-- Driver GPS flow on the current UI needs one more real-phone check: start a session at a stop, confirm the location chip shows "Here" and pickup auto-selects that stop, then move and confirm it updates.
+- Driver GPS flow on the current UI needs one more real-phone check: start a session at a stop, confirm the location chip shows "Here" and pickup auto-selects that stop, then move and confirm it updates. Also confirm the screen stays on (Screen Wake Lock needs iOS 16.4+), and that locking the phone shows riders "Last seen" after 2 minutes.
 
 ## Gotchas
 

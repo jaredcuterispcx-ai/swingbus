@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { allocateCallsign, normalizeCallsign, takenCallsigns } from "./callsigns";
 import { refreshGroundControl } from "./dispatch";
 import { stopAt } from "./geo";
+import { maxPartyForTrip, nearestDropOff, partyCaps, presenceOf, takeOffline } from "./lifecycle";
 import { hashCancelToken, newCancelToken, rideForToken } from "./ride-token";
 import { seatLedger } from "./seats";
 import { assertInService } from "./service-hours";
@@ -237,10 +238,16 @@ export async function createParty(input: {
     if (input.stopId === input.destinationId) {
       throw new Error("Destination must differ from pickup stand");
     }
-    for (const id of [input.stopId, input.destinationId]) {
-      assertInService(state.stops.find((s) => s.id === id)!);
-    }
+    const [pickup, dropoff] = [input.stopId, input.destinationId].map(
+      (id) => state.stops.find((s) => s.id === id)!,
+    );
+    assertInService(pickup);
+    assertInService(dropoff);
     const partySize = Math.min(12, Math.max(1, Math.floor(input.partySize)));
+    const seatsMax = maxPartyForTrip(partyCaps(state.vehicles, Date.now()), pickup, dropoff);
+    if (partySize > seatsMax) {
+      throw new Error(`Shuttles online seat up to ${seatsMax}`);
+    }
     const now = new Date().toISOString();
     const cancelToken = newCancelToken();
     const party: PassengerParty = {
@@ -364,7 +371,6 @@ export async function updateVehicleLocation(input: {
         input.currentStopId !== undefined
           ? input.currentStopId
           : (detected ?? state.vehicles[idx].currentStopId),
-      active: true,
     };
     const vehicles = [...state.vehicles];
     vehicles[idx] = updated;
@@ -409,22 +415,43 @@ export async function setVehicleHeading(input: {
 export async function setVehicleActive(
   vehicleId: string,
   active: boolean,
+  opts: { dropOff?: boolean } = {},
 ): Promise<Vehicle | null> {
   return withWrite(async (state) => {
     const idx = state.vehicles.findIndex((v) => v.id === vehicleId);
     if (idx < 0) return null;
-    const now = new Date().toISOString();
-    const updated: Vehicle = {
-      ...state.vehicles[idx],
-      active,
-      status: active ? "available" : "offline",
-    };
-    const vehicles = [...state.vehicles];
-    vehicles[idx] = updated;
-    let next: AppState = { ...state, vehicles, updatedAt: now };
-    next = refreshGroundControl(next);
+    const prev = state.vehicles[idx];
+    if (active && prev.active) return prev;
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    let next: AppState;
+    if (!active) {
+      const riding = state.parties
+        .filter((p) => p.vehicleId === vehicleId && p.status === "onboard")
+        .reduce((n, p) => n + p.partySize, 0);
+      if (riding > 0 && !opts.dropOff) throw new Error(`${riding} still on board`);
+      next = takeOffline(state, vehicleId, nowMs);
+    } else {
+      const others = state.vehicles.filter((v) => v.id !== vehicleId);
+      const callsign = takenCallsigns(others).has(prev.callsign.toLowerCase())
+        ? allocateCallsign(prev.callsign, others)
+        : prev.callsign;
+      // An old fix would hand riders ETAs from wherever the shuttle used to be:
+      // drop it and restart the presence clock until the phone sends a new one.
+      const fresh = presenceOf(prev, nowMs) === "live";
+      const vehicles = [...state.vehicles];
+      vehicles[idx] = {
+        ...prev,
+        callsign,
+        active: true,
+        status: "available",
+        ...(fresh ? {} : { lat: null, lng: null, currentStopId: null, lastLocationAt: now }),
+      };
+      next = { ...state, vehicles };
+    }
+    next = refreshGroundControl({ ...next, updatedAt: now }, nowMs);
     await persist(next);
-    return updated;
+    return next.vehicles[idx];
   });
 }
 
@@ -470,7 +497,9 @@ export async function boardParties(input: {
   return withWrite(async (state) => {
     const vehicle = state.vehicles.find((v) => v.id === input.vehicleId);
     if (!vehicle) throw new Error("Unknown vehicle");
-    if (!state.stops.some((s) => s.id === input.stopId)) {
+    if (!vehicle.active) throw new Error(`${vehicle.callsign} is offline`);
+    const stand = state.stops.find((s) => s.id === input.stopId);
+    if (!stand) {
       throw new Error("Unknown stand");
     }
 
@@ -583,6 +612,8 @@ export async function boardParties(input: {
       return c;
     });
 
+    // Head for the closest drop-off; the driver can still pick another stop.
+    const headingStopId = nearestDropOff({ ...state, parties }, input.vehicleId, stand);
     const vehicles = state.vehicles.map((v) => {
       if (v.id !== input.vehicleId) return v;
       const occupied = Math.min(v.capacity, v.occupied + seats);
@@ -590,11 +621,11 @@ export async function boardParties(input: {
         ...v,
         occupied,
         currentStopId: input.stopId,
-        active: true,
+        headingStopId: headingStopId ?? v.headingStopId,
         status:
           occupied >= v.capacity
             ? ("full" as const)
-            : ("boarding" as const),
+            : ("enroute" as const),
       };
     });
 
@@ -692,16 +723,27 @@ export async function alight(input: {
       createdAt: now,
     };
 
+    const after = input.destinationId ? parties : adjusted;
+    const ridingTo = (list: PassengerParty[], stopId: string) =>
+      list.some((p) => p.vehicleId === vehicle.id && p.status === "onboard" && p.destinationId === stopId);
+    let headingStopId = vehicle.headingStopId;
+    if (headingStopId && ridingTo(state.parties, headingStopId) && !ridingTo(after, headingStopId)) {
+      // The last rider for that stop got off: head for the next closest drop-off, if any.
+      const from = state.stops.find((s) => s.id === headingStopId) ?? null;
+      headingStopId = nearestDropOff({ ...state, parties: after }, vehicle.id, from);
+    }
+
     const vehicles = [...state.vehicles];
     vehicles[idx] = {
       ...vehicle,
       occupied,
+      headingStopId,
       status: occupied === 0 ? "available" : "enroute",
     };
 
     let next: AppState = {
       ...state,
-      parties: input.destinationId ? parties : adjusted,
+      parties: after,
       vehicles,
       events: [event, ...state.events].slice(0, 200),
       updatedAt: now,
@@ -710,6 +752,60 @@ export async function alight(input: {
     await persist(next);
     const v = next.vehicles[idx];
     return { vehicle: v, ledger: seatLedger(next, v) };
+  });
+}
+
+/** The driver is at the stop and these riders aren't: free their seats. */
+export async function markNoShow(input: {
+  vehicleId: string;
+  stopId: string;
+  partyIds: string[];
+}): Promise<{ seats: number; partyIds: string[] }> {
+  return withWrite(async (state) => {
+    const vehicle = state.vehicles.find((v) => v.id === input.vehicleId);
+    if (!vehicle) throw new Error("Unknown vehicle");
+    if (!vehicle.active) throw new Error(`${vehicle.callsign} is offline`);
+    const requested = new Set(input.partyIds);
+    const missed = state.parties.filter(
+      (p) =>
+        requested.has(p.id) &&
+        p.stopId === input.stopId &&
+        (p.status === "waiting" || p.status === "cleared" || p.status === "boarding") &&
+        (!p.vehicleId || p.vehicleId === vehicle.id),
+    );
+    if (missed.length === 0) throw new Error("Those riders are no longer waiting");
+    const now = new Date().toISOString();
+    const ids = new Set(missed.map((p) => p.id));
+    const seats = missed.reduce((n, p) => n + p.partySize, 0);
+    const event: BoardingEvent = {
+      id: randomUUID(),
+      vehicleId: vehicle.id,
+      stopId: input.stopId,
+      destinationId: missed[0].destinationId,
+      partyIds: [...ids],
+      seats,
+      kind: "no_show",
+      createdAt: now,
+    };
+    let next: AppState = {
+      ...state,
+      parties: state.parties.map((p) =>
+        ids.has(p.id)
+          ? {
+              ...p,
+              status: "cancelled" as const,
+              cancelReason: "no_show" as const,
+              vehicleId: vehicle.id,
+              updatedAt: now,
+            }
+          : p,
+      ),
+      events: [event, ...state.events].slice(0, 200),
+      updatedAt: now,
+    };
+    next = refreshGroundControl(next);
+    await persist(next);
+    return { seats, partyIds: [...ids] };
   });
 }
 
