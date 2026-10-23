@@ -16,6 +16,7 @@ See [docs/GROUND-CONTROL.md](docs/GROUND-CONTROL.md) for the seat ledger and lif
 | Driver / vehicle | `/driver` |
 | Ground control | `/dispatch` |
 | Stand QR sheet | `/stops` |
+| Stop admin | `/admin` |
 | Phone deploy cheat-sheet | `/deploy` |
 
 ## Seat math (drivers)
