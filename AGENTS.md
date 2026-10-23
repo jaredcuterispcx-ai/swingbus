@@ -76,6 +76,8 @@ npm run dev                  # http://127.0.0.1:43127
 ./scripts/dev-forever.sh     # same, auto-restarts if the server exits
 ```
 
+Cursor setup: `.cursor/rules/swingbus.mdc` is always applied (naming, design, engineering rules). `.cursor/environment.json` runs `npm ci` at build time and `scripts/cloud-start.sh` on boot, which keeps the dev server up in the `swingbus-dev` tmux session (log: `/tmp/swingbus-dev.log`). Add `DRIVER_PASSWORD`, `ADMIN_PASSWORD`, `AUTH_SECRET` as Cloud Agent secrets.
+
 Phones off the corporate network: run on a stable internal host and expose it with Tailscale Funnel (`scripts/expose-funnel.sh`, `DEPLOY.md`). Ephemeral sandboxes and free quick-tunnels were unreliable.
 
 ## Open items

@@ -1,0 +1,5 @@
+{
+  "name": "swingbus",
+  "install": "npm ci",
+  "start": "bash scripts/cloud-start.sh"
+}
