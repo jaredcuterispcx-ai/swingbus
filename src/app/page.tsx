@@ -75,7 +75,13 @@ export default function HomePage() {
       </Link>
 
       <p className="mt-5 text-center font-mono text-[11px] tracking-wide text-ink-soft/60 uppercase">
-        <Link href="/dispatch">Ground control</Link>
+        <Link href="/dispatch" className="inline-block px-2 py-2">
+          Ground control
+        </Link>
+        ·
+        <Link href="/admin" className="inline-block px-2 py-2">
+          Admin
+        </Link>
       </p>
     </main>
   );

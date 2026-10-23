@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo } from "react";
 import { AppHeader } from "@/components/app-header";
 import { stopName, useAppState, type VehicleWithSeats } from "@/lib/use-app-state";
@@ -68,6 +69,9 @@ export default function GroundControlPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/admin" className="sb-btn sb-btn-ghost text-sm">
+            Edit stops
+          </Link>
           <button type="button" className="sb-btn sb-btn-accent text-sm" onClick={seedDemo}>
             Seed scenario
           </button>

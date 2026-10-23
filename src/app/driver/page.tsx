@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { randomElectricCallsign } from "@/lib/callsigns";
+import { formatDistance, stopsByDistance } from "@/lib/geo";
 import type { VehicleWithSeats } from "@/lib/use-app-state";
 import { stopName, useAppState } from "@/lib/use-app-state";
 
@@ -27,6 +28,14 @@ export default function DriverPage() {
   const [destId, setDestId] = useState("");
   const [pax, setPax] = useState(1);
   const [groups, setGroups] = useState<PickupGroup[]>([]);
+  const [pos, setPos] = useState<{ lat: number; lng: number; accuracy: number } | null>(
+    null,
+  );
+  /** Last stop we auto-selected for; a manual pick sticks until the next arrival. */
+  const lastArrivalRef = useRef<string | null>(null);
+  const lastPushRef = useRef<{ at: number; stopId: string | null }>({ at: 0, stopId: null });
+  const stopsRef = useRef(state?.stops ?? []);
+  stopsRef.current = state?.stops ?? stopsRef.current;
 
   useEffect(() => {
     const saved = localStorage.getItem(VEHICLE_KEY);
@@ -46,9 +55,39 @@ export default function DriverPage() {
     setGroups([]);
   }, [pickupStopId]);
 
+  const nearby = useMemo(
+    () => (state && pos ? stopsByDistance(state.stops, pos) : []),
+    [state, pos],
+  );
+  const atStop = nearby.find((d) => d.atStop)?.stop ?? null;
+  const nearest = nearby[0] ?? null;
+  const distanceTo = useCallback(
+    (id: string) => nearby.find((d) => d.stop.id === id)?.meters,
+    [nearby],
+  );
+
+  /** Stops ordered nearest-first once GPS is available, otherwise as configured. */
+  const stopOptions = useMemo(
+    () => (nearby.length ? nearby.map((d) => d.stop) : (state?.stops ?? [])),
+    [nearby, state],
+  );
+
+  const optionLabel = (s: { id: string; name: string }) => {
+    const m = distanceTo(s.id);
+    return m == null ? s.name : `${s.name} · ${formatDistance(m)}`;
+  };
+
+  useEffect(() => {
+    const id = atStop?.id ?? null;
+    if (id === lastArrivalRef.current) return;
+    lastArrivalRef.current = id;
+    if (!id) return;
+    setPickupStopId((cur) => (cur === id || groups.length > 0 ? cur : id));
+  }, [atStop, groups.length]);
+
   const destinations = useMemo(
-    () => (state?.stops ?? []).filter((s) => s.id !== pickupStopId),
-    [state, pickupStopId],
+    () => stopOptions.filter((s) => s.id !== pickupStopId),
+    [stopOptions, pickupStopId],
   );
 
   const suggestedGroups = useMemo(() => {
@@ -95,9 +134,23 @@ export default function DriverPage() {
   useEffect(() => {
     if (!vehicleId || !navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
+      (p) => {
         setGeoError(null);
-        void pushLocation(pos.coords.latitude, pos.coords.longitude);
+        const fix = {
+          lat: p.coords.latitude,
+          lng: p.coords.longitude,
+          accuracy: p.coords.accuracy,
+        };
+        setPos(fix);
+        // Phones can emit several fixes a second; only report every 5s
+        // unless the driver just entered or left a stop.
+        const here =
+          stopsByDistance(stopsRef.current, fix).find((d) => d.atStop)?.stop.id ?? null;
+        const now = Date.now();
+        const last = lastPushRef.current;
+        if (now - last.at < 5000 && here === last.stopId) return;
+        lastPushRef.current = { at: now, stopId: here };
+        void pushLocation(fix.lat, fix.lng);
       },
       (err) => setGeoError(err.message || "Location unavailable"),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
@@ -382,7 +435,58 @@ export default function DriverPage() {
                 Location: {geoError}. Enable GPS so passengers see your ETA.
               </p>
             )}
+            {pos && (
+              <div
+                className={`mt-3 rounded-xl border px-3 py-2.5 ${
+                  atStop ? "border-leaf/45 bg-leaf/10" : "border-[var(--line)]"
+                }`}
+              >
+                {atStop ? (
+                  <>
+                    <p className="text-xs font-semibold tracking-wide text-leaf uppercase">
+                      At stop
+                    </p>
+                    <p className="sb-brand text-xl">{atStop.name}</p>
+                  </>
+                ) : nearest ? (
+                  <>
+                    <p className="text-xs font-semibold tracking-wide text-ink-soft uppercase">
+                      Nearest stop
+                    </p>
+                    <p className="sb-brand text-xl">
+                      {nearest.stop.name}{" "}
+                      <span className="font-mono text-sm font-normal text-leaf">
+                        {formatDistance(nearest.meters)}
+                      </span>
+                    </p>
+                  </>
+                ) : null}
+                <p className="text-[11px] text-ink-soft">
+                  GPS ±{Math.round(pos.accuracy)} m
+                </p>
+              </div>
+            )}
           </section>
+
+          {atStop && vehicle.headingStopId === atStop.id && vehicle.seats.occupied > 0 && (
+            <section className="sb-panel sb-rise border-leaf/45">
+              <p className="sb-chip">Arrived</p>
+              <p className="sb-brand mt-1 text-xl">
+                You&apos;re at {atStop.name}
+              </p>
+              <p className="mt-1 text-sm text-ink-soft">
+                Drop off riders headed here to free up seats.
+              </p>
+              <button
+                type="button"
+                className="sb-btn sb-btn-accent mt-3 w-full"
+                disabled={busy}
+                onClick={() => void doAlight()}
+              >
+                Drop off onboard ({vehicle.seats.occupied})
+              </button>
+            </section>
+          )}
 
           <section className="sb-panel sb-rise sb-rise-delay-1 space-y-3">
             <h3 className="sb-brand text-xl">Heading to</h3>
@@ -397,9 +501,9 @@ export default function DriverPage() {
               disabled={busy}
             >
               <option value="">Select destination</option>
-              {(state?.stops ?? []).map((s) => (
+              {stopOptions.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name}
+                  {optionLabel(s)}
                 </option>
               ))}
             </select>
@@ -424,12 +528,17 @@ export default function DriverPage() {
                 onChange={(e) => setPickupStopId(e.target.value)}
               >
                 <option value="">Where are you picking up?</option>
-                {(state?.stops ?? []).map((s) => (
+                {stopOptions.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {optionLabel(s)}
                   </option>
                 ))}
               </select>
+              {atStop && pickupStopId === atStop.id && (
+                <span className="block text-xs text-leaf">
+                  Set from your location
+                </span>
+              )}
             </label>
 
             {pickupStopId && suggestedGroups.length > 0 && (
@@ -487,7 +596,7 @@ export default function DriverPage() {
                   <option value="">Their destination</option>
                   {destinations.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name}
+                      {optionLabel(s)}
                     </option>
                   ))}
                 </select>

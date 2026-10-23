@@ -3,6 +3,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { normalizeCallsign } from "./callsigns";
 import { refreshGroundControl } from "./dispatch";
+import { stopAt } from "./geo";
 import { seatLedger } from "./seats";
 import { DEFAULT_STOPS } from "./stops";
 import type {
@@ -10,6 +11,8 @@ import type {
   BoardingEvent,
   Clearance,
   PassengerParty,
+  Stop,
+  StopService,
   Vehicle,
 } from "./types";
 
@@ -19,10 +22,10 @@ export const SCHEMA_VERSION = 3;
 
 let writeChain: Promise<void> = Promise.resolve();
 
-function emptyState(): AppState {
+function emptyState(stops: Stop[] = DEFAULT_STOPS): AppState {
   return {
     schemaVersion: SCHEMA_VERSION,
-    stops: DEFAULT_STOPS,
+    stops: stops.map((s) => ({ ...s })),
     parties: [],
     vehicles: [],
     clearances: [],
@@ -34,8 +37,9 @@ function emptyState(): AppState {
 function migrate(raw: Record<string, unknown>): AppState {
   if (raw.schemaVersion === SCHEMA_VERSION && Array.isArray(raw.parties)) {
     const state = raw as unknown as AppState;
-    // Always refresh stop catalog from source of truth (MEM shuttle sheet).
-    state.stops = DEFAULT_STOPS;
+    if (!Array.isArray(state.stops) || state.stops.length === 0) {
+      state.stops = DEFAULT_STOPS.map((s) => ({ ...s }));
+    }
     state.vehicles = (state.vehicles ?? []).map((v) => ({
       ...v,
       headingStopId: v.headingStopId ?? null,
@@ -110,12 +114,12 @@ async function ensureStore(): Promise<AppState> {
       string,
       unknown
     >;
-    const before = JSON.stringify(raw.stops);
+    const migrated = raw.schemaVersion !== SCHEMA_VERSION;
     let state = migrate(raw);
-    state.stops = DEFAULT_STOPS;
     state.schemaVersion = SCHEMA_VERSION;
+    const before = state.parties.length;
     state = pruneOrphanParties(state);
-    if (before !== JSON.stringify(state.stops) || raw.schemaVersion !== SCHEMA_VERSION) {
+    if (migrated || state.parties.length !== before) {
       await persist(state);
     }
     return state;
@@ -267,15 +271,21 @@ export async function updateVehicleLocation(input: {
     const idx = state.vehicles.findIndex((v) => v.id === input.vehicleId);
     if (idx < 0) return null;
     const now = new Date().toISOString();
+    // Without an explicit stop, snap to whichever stop the GPS fix is inside;
+    // keep the last stop when between stops.
+    const detected =
+      input.currentStopId === undefined
+        ? stopAt(state.stops, { lat: input.lat, lng: input.lng })?.id
+        : undefined;
     const updated: Vehicle = {
       ...state.vehicles[idx],
       lat: input.lat,
       lng: input.lng,
       lastLocationAt: now,
       currentStopId:
-        input.currentStopId === undefined
-          ? state.vehicles[idx].currentStopId
-          : input.currentStopId,
+        input.currentStopId !== undefined
+          ? input.currentStopId
+          : (detected ?? state.vehicles[idx].currentStopId),
       active: true,
     };
     const vehicles = [...state.vehicles];
@@ -595,11 +605,174 @@ export async function alight(input: {
   });
 }
 
+/** Clears riders and fleet but keeps the admin-managed stop list. */
 export async function resetDemo(): Promise<AppState> {
-  return withWrite(async () => {
-    const state = emptyState();
+  return withWrite(async (current) => {
+    const state = emptyState(current.stops);
     await persist(state);
     return state;
+  });
+}
+
+export type StopInput = {
+  name?: string;
+  shortCode?: string;
+  description?: string;
+  lat?: number;
+  lng?: number;
+  service?: StopService | null;
+  arrivalRadiusM?: number | null;
+};
+
+const SERVICES: StopService[] = ["onsite", "offsite", "both"];
+
+function slugify(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "stop"
+  );
+}
+
+function initials(name: string): string {
+  const words = name.split(/[^A-Za-z0-9]+/).filter(Boolean);
+  const code =
+    words.length > 1
+      ? words.map((w) => w[0]).join("")
+      : (words[0] ?? "ST").slice(0, 2);
+  return code.toUpperCase().slice(0, 4);
+}
+
+function applyStopInput(base: Stop, input: StopInput): Stop {
+  const next: Stop = { ...base };
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name) throw new Error("Stop name is required");
+    next.name = name.slice(0, 60);
+  }
+  if (input.shortCode !== undefined) {
+    const code = input.shortCode.trim().toUpperCase().replace(/\s+/g, "");
+    next.shortCode = (code || initials(next.name)).slice(0, 4);
+  }
+  if (input.description !== undefined) {
+    next.description = input.description.trim().slice(0, 140);
+  }
+  if (input.lat !== undefined) {
+    if (!Number.isFinite(input.lat) || Math.abs(input.lat) > 90) {
+      throw new Error("Latitude must be between -90 and 90");
+    }
+    next.lat = input.lat;
+  }
+  if (input.lng !== undefined) {
+    if (!Number.isFinite(input.lng) || Math.abs(input.lng) > 180) {
+      throw new Error("Longitude must be between -180 and 180");
+    }
+    next.lng = input.lng;
+  }
+  if (input.service !== undefined) {
+    if (input.service === null) delete next.service;
+    else if (SERVICES.includes(input.service)) next.service = input.service;
+    else throw new Error("Unknown service type");
+  }
+  if (input.arrivalRadiusM !== undefined) {
+    if (input.arrivalRadiusM === null) delete next.arrivalRadiusM;
+    else if (
+      Number.isFinite(input.arrivalRadiusM) &&
+      input.arrivalRadiusM >= 10 &&
+      input.arrivalRadiusM <= 1000
+    ) {
+      next.arrivalRadiusM = Math.round(input.arrivalRadiusM);
+    } else throw new Error("Arrival radius must be 10–1000 m");
+  }
+  return next;
+}
+
+export async function createStop(input: StopInput): Promise<Stop> {
+  return withWrite(async (state) => {
+    if (input.lat === undefined || input.lng === undefined) {
+      throw new Error("Latitude and longitude are required");
+    }
+    const name = (input.name ?? "").trim();
+    if (!name) throw new Error("Stop name is required");
+    let id = slugify(name);
+    const taken = new Set(state.stops.map((s) => s.id));
+    for (let n = 2; taken.has(id); n++) id = `${slugify(name)}-${n}`;
+    const stop = applyStopInput(
+      { id, name: name || "Stop", shortCode: "", lat: 0, lng: 0, description: "" },
+      { shortCode: "", ...input },
+    );
+    const next: AppState = {
+      ...state,
+      stops: [...state.stops, stop],
+      updatedAt: new Date().toISOString(),
+    };
+    await persist(refreshGroundControl(next));
+    return stop;
+  });
+}
+
+export async function updateStop(id: string, input: StopInput): Promise<Stop | null> {
+  return withWrite(async (state) => {
+    const idx = state.stops.findIndex((s) => s.id === id);
+    if (idx < 0) return null;
+    const stop = applyStopInput(state.stops[idx], input);
+    const stops = [...state.stops];
+    stops[idx] = stop;
+    const next = refreshGroundControl({
+      ...state,
+      stops,
+      updatedAt: new Date().toISOString(),
+    });
+    await persist(next);
+    return stop;
+  });
+}
+
+export async function deleteStop(id: string): Promise<boolean> {
+  return withWrite(async (state) => {
+    if (!state.stops.some((s) => s.id === id)) return false;
+    const openRiders = state.parties.filter(
+      (p) =>
+        (p.stopId === id || p.destinationId === id) &&
+        ["waiting", "cleared", "boarding", "onboard"].includes(p.status),
+    ).length;
+    if (openRiders > 0) {
+      throw new Error(
+        `${openRiders} active ride${openRiders === 1 ? "" : "s"} use this stop — finish or cancel them first`,
+      );
+    }
+    if (state.stops.length <= 2) {
+      throw new Error("Keep at least two stops so riders have somewhere to go");
+    }
+    const vehicles = state.vehicles.map((v) => ({
+      ...v,
+      headingStopId: v.headingStopId === id ? null : v.headingStopId,
+      currentStopId: v.currentStopId === id ? null : v.currentStopId,
+    }));
+    const next = refreshGroundControl({
+      ...state,
+      stops: state.stops.filter((s) => s.id !== id),
+      vehicles,
+      updatedAt: new Date().toISOString(),
+    });
+    await persist(next);
+    return true;
+  });
+}
+
+/** Restore the stop list from the MEM shuttle sheet defaults. */
+export async function restoreDefaultStops(): Promise<Stop[]> {
+  return withWrite(async (state) => {
+    const stops = DEFAULT_STOPS.map((s) => ({ ...s }));
+    const next = pruneOrphanParties({
+      ...state,
+      stops,
+      updatedAt: new Date().toISOString(),
+    });
+    await persist(refreshGroundControl(next));
+    return stops;
   });
 }
 

@@ -11,6 +11,8 @@ export interface Stop {
   lng: number;
   description: string;
   service?: StopService;
+  /** Drivers within this many meters are treated as at the stop. */
+  arrivalRadiusM?: number;
 }
 
 /** Passenger party waiting at a stand (stop). */

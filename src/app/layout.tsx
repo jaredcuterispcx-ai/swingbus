@@ -1,18 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { JetBrains_Mono, Outfit } from "next/font/google";
+// Bundled locally: next/font/google downloads at boot, which fails on
+// restricted networks and takes the whole app down.
+import "@fontsource-variable/outfit";
+import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
-
-const outfit = Outfit({
-  variable: "--font-outfit",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-});
-
-const mono = JetBrains_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-});
 
 export const metadata: Metadata = {
   title: "Swing Bus · XSI",
@@ -35,7 +26,7 @@ export const viewport: Viewport = {
   themeColor: "#050507",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -45,7 +36,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${outfit.variable} ${mono.variable} antialiased`}>
+      <body className="antialiased">
         {children}
         <footer className="mx-auto max-w-[480px] px-5 pt-2 pb-8 text-center text-[11px] leading-relaxed text-ink-soft/60">
           Swingbus brought to you by your friends in Transportation and

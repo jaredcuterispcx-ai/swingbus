@@ -2,7 +2,9 @@
 
 Airport-style **ground control** for XSI / MEM campus shuttles (Macroharder + offsite lots). Passengers request **seats** at a stand; vehicles publish **capacity**; the board holds seats via **clearances** and routes the nearest bus with free capacity — like a tower for buses.
 
-Stops are loaded from the MEM shuttle sheet (`src/lib/stops.ts`). Lat/lng are approximate until pin-accurate coords are supplied.
+Stops start from the MEM shuttle sheet (`src/lib/stops.ts`) and are then managed at `/admin`: rename, move (including "use my current location" while standing at the curb), add, or delete stops. Edits persist in `data/store.json`. Set `ADMIN_PIN` to require a PIN for stop edits.
+
+Drivers' phones snap to a stop when they're inside its arrival radius (75 m by default, adjustable per stop in admin); the pickup stop auto-fills and stop lists sort nearest-first.
 
 See [docs/GROUND-CONTROL.md](docs/GROUND-CONTROL.md) for the seat ledger and lifecycles.
 
