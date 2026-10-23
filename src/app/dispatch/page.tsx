@@ -99,7 +99,7 @@ export default function GroundControlPage() {
       <div className="mb-4">
         <MiniMap
           stops={state?.stops ?? []}
-          vehicles={fleet}
+          vehicles={fleet.map((v) => ({ ...v, faded: v.presence !== "live" }))}
           height={260}
         />
       </div>
@@ -127,7 +127,7 @@ export default function GroundControlPage() {
                 <div className="flex items-baseline justify-between gap-2">
                   <h3 className="font-semibold">{v.callsign}</h3>
                   <span className="text-xs uppercase tracking-wide text-leaf">
-                    {v.status}
+                    {v.presence === "lost" ? "no signal" : v.status}
                   </span>
                 </div>
                 <p className="sb-brand mt-1 text-3xl tabular-nums text-ink">
@@ -142,6 +142,7 @@ export default function GroundControlPage() {
                   {v.lat != null
                     ? ` · ${v.lat.toFixed(4)}, ${v.lng!.toFixed(4)}`
                     : " · no GPS"}
+                  {v.presence !== "live" && ` · last seen ${v.lastSeenMin} min ago`}
                 </p>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-mist/50">
                   <div
@@ -247,7 +248,8 @@ export default function GroundControlPage() {
                   <span className="font-medium text-ink">
                     {v?.callsign ?? "Vehicle"}
                   </span>{" "}
-                  {e.kind === "board" ? "boarded" : "alighted"} {e.seats} @{" "}
+                  {e.kind === "board" ? "boarded" : e.kind === "no_show" ? "no-show" : "alighted"}{" "}
+                  {e.seats} @{" "}
                   {stopName(state, e.stopId)}
                   {e.kind === "board" ? (
                     <>
