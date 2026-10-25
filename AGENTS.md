@@ -29,9 +29,11 @@ Name is always lowercase, even at the start of a sentence: **swingbus** (never "
 
 ## Design direction
 
-- Mimic the Uber app: white background, black text and primary buttons, gray (#EEE) inputs, list rows with hairline dividers, big single call-to-action.
-- One accent color: electric yellow `--volt` (#FFD400). Use it as a fill (logo bolt, live dot, "at stop" chip), never as text on white.
-- Logo: yellow lightning bolt on a black rounded square (`public/bolt.svg`, `src/components/brand.tsx`).
+- Mimic the Uber app, dark by default: black background, white text and primary buttons, gray (#262626) inputs, list rows with hairline dividers, big single call-to-action. Light is the same inverted: white background, black text and buttons, #EEE inputs.
+- Color scheme: dark on every new device whatever the system setting says. The sun/moon switch (`src/components/theme-toggle.tsx`) is in every page header (`AppHeader`, plus the home page's own header), and each device remembers its pick in `localStorage` (`swingbus.theme`, synced across open tabs). An inline `<head>` script (`THEME_BOOT_SCRIPT` in `src/lib/theme.ts`) sets `<html data-theme>` and the `theme-color` meta before the first paint, so nothing flashes. That script owns the only `theme-color` meta: a server-rendered one with the same attributes gets adopted by React and dropped on the next navigation, so don't put `themeColor` back in the Next viewport.
+- Colors are CSS variables in `globals.css`. Light is the base and the dark palette sits in `@media screen` under `:root:not([data-theme="light"])`, so printing is always light and `.sb-light` keeps a subtree light (QR cards preview the paper and always show dark modules on white). Components use the tokens (`bg-foam`, `text-ink-soft`, `bg-strong`/`text-on-strong`, `bg-raised` for controls on foam, `sb-night` for brand black, `text-on-volt`), never `bg-white`, `bg-black` or hex. `src/lib/theme.test.ts` checks every token pair against WCAG AA in both schemes (4.5:1 text, 3:1 map markers and icons).
+- One accent color: electric yellow `--volt` (#FFD400). Use it as a fill (logo bolt, live dot, "at stop" chip) with black text on it, never as text on white.
+- Logo: yellow lightning bolt on a black rounded square (`public/bolt.svg`, `src/components/brand.tsx`). On dark pages the logo, shuttle chips and the driver's live bar get a hairline ring so the black square still reads.
 - Minimize text. No explanatory paragraphs on selection screens.
 - Mobile first: inputs are 16px (prevents iOS zoom), tap targets ≥ 44px, destination picking is a tappable list rather than a dropdown.
 - The map is a schematic SVG (`src/components/mini-map.tsx`) — no tile provider, works offline. It frames the main campus cluster and clamps far-off lots (Southland Mall) to the edge.
@@ -64,6 +66,7 @@ Key modules (`src/lib/`):
 | `geo.ts` | Distances, arrival radius, nearest stop |
 | `service-hours.ts` | Service hours per stop tag (Memphis time): open/closed, next opening; riders can't request closed stops. Also which shuttle service a trip needs (`tripService`) |
 | `callsigns.ts` | Electric callsign generation + uniqueness |
+| `theme.ts` | Color scheme: the `<head>` boot script that applies the device's pick before first paint, and the switch's helpers (`swingbus.theme`, `theme-color`, cross-tab sync) |
 | `stops.ts` | Default MEM stop list (seed only; admin edits are the source of truth after that) |
 
 API routes (`src/app/api/`): `state` (GET incl. per-stop `serviceStatus`, DELETE = reset riders/fleet but keep stops), `parties`, `vehicles` (register / location / heading / active / accept_clearance), `board` (board + alight), `stops` (CRUD + `restore_defaults`), `dispatch`, `demo/seed`. Legacy aliases: `requests`, `drivers`, `pickups`.
@@ -86,7 +89,7 @@ Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 
 npm install
 npm run dev                  # http://127.0.0.1:43127
 ./scripts/dev-forever.sh     # same, auto-restarts if the server exits
-npm test                     # service-hours tests (Node ≥ 22.18 runs .ts directly)
+npm test                     # unit tests: service hours, rate limits, theme + WCAG contrast (Node ≥ 22.18 runs .ts directly)
 ```
 
 Production container (full env table and volume notes in README → Production):
@@ -114,7 +117,7 @@ Phones reach swingbus over a public HTTPS hostname (driver GPS needs HTTPS). Tai
 
 ## Gotchas
 
-- Restart the dev server with `pkill -f next-server` (the `dev-forever.sh` loop brings it back); Ctrl-C in its tmux pane kills the loop.
+- Restart the dev server with `pkill -f next-server` (the `dev-forever.sh` loop brings it back); Ctrl-C in its tmux pane kills the loop. Restart it after changing the root layout's `metadata` or `viewport` exports too: routes compiled earlier keep serving the old head tags until then.
 - Admin lat/lng inputs split a pasted "lat, lng" pair only on paste or blur — never in `onChange`, or typing gets mangled.
 - Scripts that read `parties` from `GET /api/state` need a driver or admin `sb_session` cookie; anonymous calls get the passenger feed. Rate limits live in the server process and reset on restart; give each simulated phone its own `CF-Connecting-IP` so tests don't trip each other's limits.
 - Deleting a stop is refused while riders reference it, and at least 2 stops must remain.
