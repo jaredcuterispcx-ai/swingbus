@@ -2,15 +2,33 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/app-header";
-import { BoltGlyph } from "@/components/brand";
-import { ChevronIcon, PinIcon, TripDots, UsersIcon } from "@/components/icons";
+import { BoltGlyph, BoltMark } from "@/components/brand";
+import { ChevronIcon, ClockIcon, PinIcon, TripDots, UsersIcon } from "@/components/icons";
 import { MiniMap } from "@/components/mini-map";
-import { shuttlesForStop } from "@/lib/fleet";
+import type { PublicRide } from "@/lib/feed";
+import { etaToStop, shuttlesForStop } from "@/lib/fleet";
+import { stopAt } from "@/lib/geo";
+import { EXPIRE_AFTER_MS, MAX_PARTY, maxPartyForTrip } from "@/lib/lifecycle";
+import { hoursLabel, opensLabel, statusOf } from "@/lib/service-hours";
+import { serviceLabel } from "@/lib/stops";
 import { stopName, useAppState } from "@/lib/use-app-state";
 
-const PARTY_KEY = "swingbus.partyId";
+/** A rider who comes back later than this just gets a fresh request form. */
+const OUTCOME_MS = 15 * 60_000;
+
+/**
+ * Rides whose outcome the rider has closed. The feed keeps returning the phone's
+ * latest ride, so this keeps "Arrived" from coming back while the app stays open.
+ */
+const dismissed = new Set<string>();
+
+/** Ended in a way the rider should be told about (they cancelled the rest themselves). */
+function worthTelling(ride: PublicRide, now: number) {
+  const told = ride.status === "delivered" || (ride.status === "cancelled" && ride.cancelReason);
+  return Boolean(told) && now - Date.parse(ride.updatedAt) < OUTCOME_MS;
+}
 
 export default function PassengerStopPage() {
   const params = useParams<{ stopId: string }>();
@@ -18,14 +36,8 @@ export default function PassengerStopPage() {
   const { state, loading, error, refresh } = useAppState(2500);
   const [destinationId, setDestinationId] = useState("");
   const [partySize, setPartySize] = useState(1);
-  const [partyId, setPartyId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const saved = localStorage.getItem(PARTY_KEY);
-    if (saved) setPartyId(saved);
-  }, []);
 
   const stop = state?.stops.find((s) => s.id === stopId);
   const destinations = useMemo(
@@ -33,19 +45,28 @@ export default function PassengerStopPage() {
     [state, stopId],
   );
 
-  const myParty = state?.parties.find(
-    (p) =>
-      p.id === partyId &&
-      (p.status === "waiting" || p.status === "cleared" || p.status === "boarding"),
+  /** Server clock, so the outcome window doesn't depend on the phone's. */
+  const now = state ? Date.parse(state.updatedAt) : 0;
+  const ride = state?.ride;
+  const myParty = ride && ride.stopId === stopId && !dismissed.has(ride.id) ? ride : undefined;
+  const waiting = Boolean(
+    myParty &&
+      (myParty.status === "waiting" || myParty.status === "cleared" || myParty.status === "boarding"),
   );
-  const waiting = Boolean(myParty && myParty.stopId === stopId);
+  const riding = myParty?.status === "onboard";
+  const ended = myParty && worthTelling(myParty, now) ? myParty : null;
+  const tripTo = waiting ? myParty?.destinationId : destinationId;
 
   const fleet = useMemo(
-    () => (state && stopId ? shuttlesForStop(state, stopId) : []),
-    [state, stopId],
+    () => (state && stopId ? shuttlesForStop(state, stopId, tripTo) : []),
+    [state, stopId, tripTo],
   );
   const mine = waiting ? fleet.find((row) => row.vehicle.id === myParty?.vehicleId) : undefined;
-  const next = mine ?? fleet[0] ?? null;
+  const next = mine ?? fleet.find((row) => row.vehicle.presence !== "lost") ?? null;
+  const maxRiders = state
+    ? maxPartyForTrip(state, stop, state.stops.find((s) => s.id === tripTo))
+    : MAX_PARTY;
+  const riders = Math.min(partySize, maxRiders);
 
   async function submit() {
     setSubmitting(true);
@@ -54,12 +75,10 @@ export default function PassengerStopPage() {
       const res = await fetch("/api/parties", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stopId, destinationId, partySize }),
+        body: JSON.stringify({ stopId, destinationId, partySize: riders }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Request failed");
-      localStorage.setItem(PARTY_KEY, data.id);
-      setPartyId(data.id);
       await refresh();
       setDestinationId("");
     } catch (err) {
@@ -70,21 +89,29 @@ export default function PassengerStopPage() {
   }
 
   async function cancelWait() {
-    if (!partyId) return;
+    if (!myParty) return;
     await fetch("/api/parties", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "cancel", id: partyId }),
+      body: JSON.stringify({ action: "cancel", id: myParty.id }),
     });
-    localStorage.removeItem(PARTY_KEY);
-    setPartyId(null);
     setDestinationId("");
     await refresh();
   }
 
+  function requestAgain(r: PublicRide) {
+    dismissed.add(r.id);
+    setDestinationId(r.destinationId);
+    setPartySize(r.partySize);
+  }
+
   const activeVehicles = (state?.vehicles ?? [])
     .filter((v) => v.active)
-    .map((v) => ({ ...v, highlight: v.id === next?.vehicle.id }));
+    .map((v) => ({
+      ...v,
+      highlight: v.id === next?.vehicle.id,
+      faded: v.presence !== "live",
+    }));
 
   if (loading) {
     return (
@@ -113,8 +140,92 @@ export default function PassengerStopPage() {
     );
   }
 
+  if (ended) {
+    const arrived = ended.status === "delivered";
+    const callsign = state?.vehicles.find((v) => v.id === ended.vehicleId)?.callsign ?? "The shuttle";
+    return (
+      <main className="sb-shell">
+        <AppHeader />
+        <section className="sb-rise pt-4">
+          {arrived ? (
+            <BoltMark size={56} />
+          ) : (
+            <span className="sb-icon-btn size-14">
+              <PinIcon size={24} />
+            </span>
+          )}
+          <p className="sb-brand mt-5 text-3xl">
+            {arrived ? "Arrived" : ended.cancelReason === "no_show" ? "Missed pickup" : "Request expired"}
+          </p>
+          <p className="mt-0.5 truncate text-ink-soft">
+            {arrived
+              ? stopName(state, ended.destinationId)
+              : ended.cancelReason === "no_show"
+                ? `${callsign} couldn't find you`
+                : `No pickup in ${EXPIRE_AFTER_MS / 60_000} min`}
+          </p>
+          <TripCard
+            from={stop.name}
+            to={stopName(state, ended.destinationId)}
+            riders={ended.partySize}
+          />
+          {arrived ? (
+            <Link
+              href="/"
+              className="sb-btn sb-btn-primary sb-btn-lg mt-6 w-full"
+              onClick={() => dismissed.add(ended.id)}
+            >
+              Done
+            </Link>
+          ) : (
+            <button
+              type="button"
+              className="sb-btn sb-btn-primary sb-btn-lg mt-6 w-full"
+              onClick={() => requestAgain(ended)}
+            >
+              Request again
+            </button>
+          )}
+        </section>
+      </main>
+    );
+  }
+
+  if (riding && myParty) {
+    const shuttle = state?.vehicles.find((v) => v.id === myParty.vehicleId);
+    const eta = state && shuttle ? etaToStop(state.stops, shuttle, myParty.destinationId) : null;
+    const there =
+      state &&
+      shuttle?.lat != null &&
+      shuttle.lng != null &&
+      shuttle.presence !== "lost" &&
+      stopAt(state.stops, { lat: shuttle.lat, lng: shuttle.lng })?.id === myParty.destinationId;
+    const to = stopName(state, myParty.destinationId);
+    return (
+      <main className="sb-shell">
+        <AppHeader />
+        <MiniMap
+          stops={state?.stops ?? []}
+          vehicles={shuttle ? [{ ...shuttle, highlight: true }] : []}
+          pickupId={stopId}
+          destinationId={myParty.destinationId}
+          height={220}
+        />
+
+        <section className="sb-rise -mt-4 relative rounded-2xl bg-white px-1 pt-5">
+          <p className="sb-brand truncate text-3xl">On {shuttle?.callsign ?? "board"}</p>
+          <p className="mt-0.5 truncate text-ink-soft">
+            {there ? `At ${to}` : eta != null ? `To ${to} · ${eta} min` : `To ${to}`}
+          </p>
+          <TripCard from={stop.name} to={to} riders={myParty.partySize} />
+        </section>
+      </main>
+    );
+  }
+
   if (waiting && myParty) {
     const cleared = myParty.status === "cleared" || myParty.status === "boarding";
+    const tooBig = myParty.status === "waiting" && myParty.partySize > maxRiders;
     return (
       <main className="sb-shell">
         <AppHeader />
@@ -127,14 +238,23 @@ export default function PassengerStopPage() {
         />
 
         <section className="sb-rise -mt-4 relative rounded-2xl bg-white px-1 pt-5">
-          {next ? (
+          {tooBig ? (
+            <div>
+              <p className="sb-brand text-3xl">Too many riders</p>
+              <p className="mt-0.5 truncate text-ink-soft">Shuttles online seat up to {maxRiders}</p>
+            </div>
+          ) : next ? (
             <div className="flex items-end justify-between gap-3">
               <div className="min-w-0">
                 <p className="sb-brand text-3xl">
                   {next.etaMinutes != null ? `${next.etaMinutes} min` : "On the way"}
                 </p>
                 <p className="mt-0.5 truncate text-ink-soft">
-                  {cleared ? `${next.vehicle.callsign} is coming` : `${next.vehicle.callsign} is closest`}
+                  {next.vehicle.presence === "stale"
+                    ? `Last seen ${next.vehicle.lastSeenMin} min ago`
+                    : cleared
+                      ? `${next.vehicle.callsign} is coming`
+                      : `${next.vehicle.callsign} is closest`}
                 </p>
               </div>
               <span className="sb-pill sb-pill-dark shrink-0">
@@ -149,35 +269,34 @@ export default function PassengerStopPage() {
             </div>
           )}
 
-          <div className="mt-5 flex gap-3 rounded-xl bg-foam p-3.5">
-            <TripDots />
-            <div className="min-w-0 flex-1 space-y-4">
-              <p className="truncate font-semibold">{stop.name}</p>
-              <p className="truncate font-semibold">{stopName(state, myParty.destinationId)}</p>
-            </div>
-            <span className="flex items-center gap-1 self-center text-sm font-semibold">
-              <UsersIcon size={16} />
-              {myParty.partySize}
-            </span>
-          </div>
+          <TripCard
+            from={stop.name}
+            to={stopName(state, myParty.destinationId)}
+            riders={myParty.partySize}
+          />
 
           {fleet.length > 1 && (
             <>
               <h2 className="sb-brand mt-6 mb-1 text-lg">All shuttles</h2>
               <ul>
                 {fleet.map((row) => (
-                  <li key={row.vehicle.id} className="sb-row cursor-default">
+                  <li
+                    key={row.vehicle.id}
+                    className={`sb-row cursor-default ${row.vehicle.presence === "lost" ? "opacity-50" : ""}`}
+                  >
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-black">
                       <BoltGlyph size={16} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-semibold">{row.vehicle.callsign}</span>
                       <span className="block truncate text-sm text-ink-soft">
-                        {row.comingHere
-                          ? "Coming here"
-                          : row.headingName
-                            ? `→ ${row.headingName}`
-                            : `${row.seatsFree} seats`}
+                        {row.vehicle.presence !== "live"
+                          ? `Last seen ${row.vehicle.lastSeenMin} min ago`
+                          : row.comingHere
+                            ? "Coming here"
+                            : row.headingName
+                              ? `→ ${row.headingName}`
+                              : `${row.seatsFree} seats`}
                       </span>
                     </span>
                     <span className="font-semibold tabular-nums">
@@ -201,7 +320,41 @@ export default function PassengerStopPage() {
     );
   }
 
-  const dest = destinations.find((d) => d.id === destinationId);
+  const pickupStatus = statusOf(state, stopId);
+  if (!pickupStatus.open) {
+    return (
+      <main className="sb-shell">
+        <AppHeader />
+        <MiniMap
+          stops={state?.stops ?? []}
+          vehicles={(state?.vehicles ?? []).filter((v) => v.active)}
+          pickupId={stopId}
+          height={200}
+        />
+
+        <section className="sb-rise mt-5">
+          <p className="sb-brand text-3xl">{opensLabel(pickupStatus)}</p>
+          <p className="mt-0.5 truncate text-ink-soft">{stop.name} is closed</p>
+
+          <div className="mt-5 flex items-center gap-3 rounded-xl bg-foam p-3.5">
+            <ClockIcon />
+            <span className="min-w-0 flex-1 truncate font-semibold">
+              {serviceLabel(stop.service) || "Shuttle"} hours
+            </span>
+            <span className="shrink-0 text-sm font-semibold">{hoursLabel(stop)}</span>
+          </div>
+
+          <Link href="/" className="sb-btn sb-btn-primary sb-btn-lg mt-6 w-full">
+            Choose another stop
+          </Link>
+        </section>
+      </main>
+    );
+  }
+
+  const offered = destinations.filter((s) => statusOf(state, s.id).open);
+  const closed = destinations.filter((s) => !statusOf(state, s.id).open);
+  const dest = offered.find((d) => d.id === destinationId);
 
   return (
     <main className="sb-shell flex flex-col">
@@ -227,7 +380,7 @@ export default function PassengerStopPage() {
 
       {!dest ? (
         <ul className="sb-rise">
-          {destinations.map((s) => (
+          {offered.map((s) => (
             <li key={s.id}>
               <button type="button" className="sb-row" onClick={() => setDestinationId(s.id)}>
                 <span className="sb-icon-btn size-10">
@@ -238,6 +391,19 @@ export default function PassengerStopPage() {
                   <ChevronIcon />
                 </span>
               </button>
+            </li>
+          ))}
+          {closed.map((s) => (
+            <li key={s.id}>
+              <div className="sb-row sb-row-off" aria-disabled="true">
+                <span className="sb-icon-btn size-10">
+                  <PinIcon />
+                </span>
+                <span className="min-w-0 flex-1 truncate font-semibold">{s.name}</span>
+                <span className="shrink-0 text-sm font-semibold">
+                  {opensLabel(statusOf(state, s.id))}
+                </span>
+              </div>
             </li>
           ))}
         </ul>
@@ -259,23 +425,26 @@ export default function PassengerStopPage() {
                 type="button"
                 aria-label="Fewer riders"
                 className="sb-icon-btn text-xl font-semibold"
-                disabled={partySize <= 1}
-                onClick={() => setPartySize((n) => Math.max(1, n - 1))}
+                disabled={riders <= 1}
+                onClick={() => setPartySize(Math.max(1, riders - 1))}
               >
                 −
               </button>
-              <span className="sb-brand w-10 text-center text-2xl tabular-nums">{partySize}</span>
+              <span className="sb-brand w-10 text-center text-2xl tabular-nums">{riders}</span>
               <button
                 type="button"
                 aria-label="More riders"
                 className="sb-icon-btn text-xl font-semibold"
-                disabled={partySize >= 12}
-                onClick={() => setPartySize((n) => Math.min(12, n + 1))}
+                disabled={riders >= maxRiders}
+                onClick={() => setPartySize(Math.min(maxRiders, riders + 1))}
               >
                 +
               </button>
             </div>
           </div>
+          {riders >= maxRiders && maxRiders < MAX_PARTY && (
+            <p className="mt-2 text-right text-sm text-ink-soft">Max {maxRiders} per shuttle</p>
+          )}
 
           <div className="sb-sticky-cta mt-auto">
             {next?.etaMinutes != null && (
@@ -296,5 +465,21 @@ export default function PassengerStopPage() {
         </div>
       )}
     </main>
+  );
+}
+
+function TripCard({ from, to, riders }: { from: string; to: string; riders: number }) {
+  return (
+    <div className="mt-5 flex gap-3 rounded-xl bg-foam p-3.5">
+      <TripDots />
+      <div className="min-w-0 flex-1 space-y-4">
+        <p className="truncate font-semibold">{from}</p>
+        <p className="truncate font-semibold">{to}</p>
+      </div>
+      <span className="flex items-center gap-1 self-center text-sm font-semibold">
+        <UsersIcon size={16} />
+        {riders}
+      </span>
+    </div>
   );
 }

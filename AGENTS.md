@@ -25,7 +25,7 @@ Name is always lowercase, even at the start of a sentence: **swingbus** (never "
 
 **Admin** (`/admin`): rename, move, add, delete stops; persisted. "Use my location" while standing at a curb, or paste `lat, lng`. 
 
-**Passwords**: `/driver` needs "swingbus-driver"; `/dispatch` and `/admin` need "swingbus-admin" (admin also opens driver). Enforced in `src/middleware.ts` for pages and mutating APIs via signed cookies (`src/lib/auth.ts`); overridable with `DRIVER_PASSWORD` / `ADMIN_PASSWORD` / `AUTH_SECRET`. Passenger pages and reads stay public.
+**Passwords**: `/driver` needs "swingbus-driver"; `/dispatch` and `/admin` need "swingbus-admin" (admin also opens driver). Enforced in `src/middleware.ts` for pages and mutating APIs via signed cookies (`src/lib/auth.ts`); overridable with `DRIVER_PASSWORD` / `ADMIN_PASSWORD` / `AUTH_SECRET`. Passenger pages and reads stay public. Those defaults are public (so is the repo) and only work in `npm run dev`: production builds exit at boot (`src/instrumentation.ts`) and refuse sign-in and sessions unless all three env vars are set, the passwords aren't the defaults and differ, and `AUTH_SECRET` has 32+ characters (`authConfigProblem()` in `src/lib/auth.ts`).
 
 ## Design direction
 
@@ -38,8 +38,12 @@ Name is always lowercase, even at the start of a sentence: **swingbus** (never "
 
 ## Architecture
 
-- Next.js 15 App Router + TypeScript + Tailwind v4. No database: state lives in `data/store.json` (gitignored), written through a serialized write chain in `src/lib/store.ts`.
+- Next.js 15 App Router + TypeScript + Tailwind v4. No database: state lives in `store.json` under `DATA_DIR` (default `data/`, gitignored; `/data` in the container), written through a serialized write chain in `src/lib/store.ts`. `persist()` writes a temp file and renames it over `store.json`, so a crash never leaves a half-written store. Missing file → built-in defaults; unreadable file → requests fail and the file is left alone, never reseeded over. `src/lib/backups.ts` (started by `src/instrumentation.ts`) keeps a dated daily copy beside it (`store.json.YYYY-MM-DD`, newest `BACKUP_DAYS`, default 14). The app must run as **exactly one process**: the state is one file behind an in-process lock, so no horizontal scaling and no serverless.
 - Clients poll `GET /api/state` (2–8 s depending on page).
+- Anonymous `GET /api/state` returns only the passenger feed (`publicState` in `src/lib/feed.ts`): stops with their `serviceStatus`, shuttles in service (position, current and next stop, onsite or offsite, free seats, and presence worked out on the server: `presence` live/stale/lost plus `lastSeenMin`, never their check-in times), which shuttle is coming to which stop, `maxPartySize` and `maxPartyByService` (never capacities), the snapshot's `updatedAt`, and the phone's own ride (with `cancelReason` and `updatedAt`). No other riders' requests, free text, events or offline shuttles. Signed-in drivers and admins get the full state (`staffState`). Pages read it with `useAppState` (passenger feed) or `useStaffState` (full state).
+- Requesting a ride sets an http-only `sb_ride` cookie (path `/api`, one day) holding that ride's cancel token; only its SHA-256 is stored (`src/lib/ride-token.ts`). Cancelling needs that cookie or a driver/admin session, and only waiting or cleared rides can be cancelled. A phone gets one open request at a time.
+- Per-IP limits (`src/lib/rate-limit.ts`, in memory, keyed on `CF-Connecting-IP`, else the nearest `X-Forwarded-For` hop): `POST /api/parties` 60 a minute; `POST /api/auth` 10 wrong passwords a minute, then a 10-minute wait. They match the planned Cloudflare rules.
+- Delivered and cancelled requests are deleted 3 hours after they close (`CLOSED_RIDE_RETENTION_MS` in `store.ts`).
 - Fonts are bundled via `@fontsource-variable/*`. Do **not** switch back to `next/font/google`: it downloads at boot and failing downloads took the whole app down.
 - Custom CSS classes (`sb-*`) live in `@layer components`, base resets in `@layer base`, so Tailwind utilities can override them. Unlayered rules beat utilities — that bug once hid button labels.
 
@@ -49,24 +53,32 @@ Key modules (`src/lib/`):
 |------|------|
 | `types.ts` | Stop, PassengerParty, Vehicle, Clearance, BoardingEvent, AppState |
 | `store.ts` | Persistence, migrations (`SCHEMA_VERSION`), all mutations incl. stop CRUD |
-| `dispatch.ts` | Ground-control routing: issues clearances (seat holds) to the nearest vehicle with room |
+| `backups.ts` | Dated daily copies of `store.json` in `DATA_DIR`, pruned to `BACKUP_DAYS` |
+| `feed.ts` | What `GET /api/state` returns: the passenger feed (`publicState`) or the full state for staff (`staffState`) |
+| `ride-token.ts` | Rider cancel tokens: the `sb_ride` cookie, hashing, finding a phone's ride |
+| `rate-limit.ts` | In-memory per-IP limits for sign-in and ride requests |
+| `dispatch.ts` | Ground-control routing: issues clearances (seat holds) to the nearest vehicle with room that runs the trip's service |
+| `lifecycle.ts` | Time rules run on every refresh: shuttle presence off `lastLocationAt` (last seen 2 min, out of contact 5, offline 30), requests lapse at 30 min; party cap, counting only shuttles that run the trip (`maxPartyForTrip`); nearest drop-off for the heading (`docs/GROUND-CONTROL.md`) |
 | `seats.ts` | Seat ledger: `available = capacity − occupied − reserved` |
-| `fleet.ts` | Per-stop ranking of shuttles + ETA (haversine, ~22 km/h) for the waiting view |
+| `fleet.ts` | Per-stop ranking of the shuttles that could take the rider + ETA (haversine, ~22 km/h) for the waiting view |
 | `geo.ts` | Distances, arrival radius, nearest stop |
+| `service-hours.ts` | Service hours per stop tag (Memphis time): open/closed, next opening; riders can't request closed stops. Also which shuttle service a trip needs (`tripService`) |
 | `callsigns.ts` | Electric callsign generation + uniqueness |
 | `stops.ts` | Default MEM stop list (seed only; admin edits are the source of truth after that) |
 
-API routes (`src/app/api/`): `state` (GET, DELETE = reset riders/fleet but keep stops), `parties`, `vehicles` (register / location / heading / active / accept_clearance), `board` (board + alight), `stops` (CRUD + `restore_defaults`), `dispatch`, `demo/seed`. Legacy aliases: `requests`, `drivers`, `pickups`.
+API routes (`src/app/api/`): `state` (GET incl. per-stop `serviceStatus`, DELETE = reset riders/fleet but keep stops), `parties`, `vehicles` (register / location / heading / active / accept_clearance), `board` (board + alight), `stops` (CRUD + `restore_defaults`), `dispatch`, `demo/seed`. Legacy aliases: `requests`, `drivers`, `pickups`.
 
-Pages: `/` home, `/passenger/[stopId]`, `/driver`, `/dispatch` (ground control), `/admin`, `/stops` (printable QR codes), `/deploy` (phone-access notes).
+Pages: `/` home, `/passenger/[stopId]`, `/driver`, `/dispatch` (ground control), `/dispatch/qr` + `/dispatch/qr/driver` (printable stop and driver QR codes; `/stops` redirects there), `/admin`, `/deploy` (phone-access notes).
+
+QR codes take their base from the page's Public URL field, else `PUBLIC_URL`, else the browser's own address (`window.location`). Don't switch that to request headers: awaiting `headers()` in a server component copies the cookie into the dev-mode RSC payload. Only the bare origin plus the page path is encoded, so a code never carries a password or token, and loopback addresses are refused (`src/lib/public-url.ts`). Print styles are the `sb-qr-*` classes in `globals.css`: `@page` margin 0 so Chrome prints no URL/date header, each `.sb-qr-page` is one sheet.
 
 ## Stops
 
-Nine stops from the "MEM Shuttle Info" sheet: Food Trucks / War Room, Crossroads, Macroharder West, Macroharder East, Church Parking Lot (Surge Concierge / Onboarding), Southland Mall Parking Lot, Duke, Gun Range, Spam / Nexus. Each is tagged onsite / offsite / both.
+Nine stops from the "MEM Shuttle Info" sheet: Food Trucks / War Room, Crossroads, Macroharder West, Macroharder East, Church Parking Lot (Surge Concierge / Onboarding), Southland Mall Parking Lot, Duke, Gun Range, Spam / Nexus. Each is tagged onsite / offsite / both. Drivers pick their shuttle's service (onsite or offsite) when they start a session, and ground control only clears a shuttle for trips its service runs: a trip to or from Church Parking Lot or Southland Mall needs the offsite shuttle, any other trip with an onsite-only stop needs the onsite shuttle, and Crossroads ↔ Macroharder East can take either. Riders only see ETAs from shuttles that could take them. Vehicles saved before tagging load as onsite.
 
-Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 PM. Dispatcher phone: (956) 658-1860.
+Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 PM. Dispatcher phone: (956) 658-1860. The hours are enforced from `SERVICE_HOURS` in `src/lib/service-hours.ts`, always in America/Chicago whatever the server or phone timezone: offsite-only stops can't be requested as pickup or destination outside their windows (passengers see "Opens 5 PM"; drivers and ground control see them as closed), while "both" and untagged stops run 24/7. Hours are config, not per stop; per-stop hours would need a new stop field, a `SCHEMA_VERSION` bump, and an admin editor. The server decides open or closed and sends it in `GET /api/state`; clients only format it.
 
-**Coordinates are approximate placeholders** (geocoding was blocked in the build environment). ETAs and "next shuttle" ranking are only rough until real pins are entered in `/admin`.
+**Coordinates**: Macroharder West/East (west and east ends of the building at 2400 Stateline Rd W, Southaven), Duke (control building at the former Duke Energy plant, 2875 Stanton Rd S), Gun Range (8325 Tulane Rd) and Southland Mall (north lot by the main entrance) are pinned at the pickup spot from public map data. Food Trucks / War Room, Crossroads, Church Parking Lot and Spam / Nexus are still placeholders (marked in `src/lib/stops.ts`) because no public source places them; ETAs and "next shuttle" ranking for those stay rough until real pins are entered in `/admin`. An existing `data/store.json` keeps its stops until someone edits them or uses "Restore MEM shuttle sheet stops" in `/admin`.
 
 ## Running
 
@@ -74,23 +86,38 @@ Service hours from the sheet: onsite shuttle 24/7; offsite 5–10 AM and 5–10 
 npm install
 npm run dev                  # http://127.0.0.1:43127
 ./scripts/dev-forever.sh     # same, auto-restarts if the server exits
+npm test                     # service-hours tests (Node ≥ 22.18 runs .ts directly)
 ```
+
+Production container (full env table and volume notes in README → Production):
+
+```bash
+docker build -t swingbus .
+docker run -p 3000:3000 -v swingbus-data:/data \
+  -e DRIVER_PASSWORD=… -e ADMIN_PASSWORD=… -e AUTH_SECRET=… \
+  -e PUBLIC_URL=https://swingbus.example.com swingbus
+```
+
+Multi-stage `Dockerfile` (Node 22 alpine → Next standalone): runs `node server.js` as uid 1000 with `PORT=3000`, `HOSTNAME=0.0.0.0` (Kubernetes overwrites HOSTNAME with the pod name, so pod specs must set it too) and `DATA_DIR=/data` (mount a persistent volume there as a directory, never `store.json` alone, writable by uid 1000). That runtime contract (PORT, HOSTNAME, DATA_DIR, `/api/health`, non-root `node server.js`, Node 22, no baked-in secrets) must stay identical to the production deploy image. `DRIVER_PASSWORD`, `ADMIN_PASSWORD` and `AUTH_SECRET` are required; `PUBLIC_URL` (pins the address printed QR codes point to; unset: the address ground control was opened at) and `BACKUP_DAYS` are optional. `GET /api/health` (public, read-only: it must never call `getState()`, which can write) returns 200 when the data dir is writable and `store.json` parses or doesn't exist yet, else 503; the image's `HEALTHCHECK` uses it. Run exactly one process: no extra replicas, no serverless, no multi-process managers. `docker-compose.yml` is a local smoke run of the same image. Without Docker: `npm ci && npm run build`, then `npm start` with the secrets set.
 
 Cursor setup: `.cursor/rules/swingbus.mdc` is always applied (naming, design, engineering rules). `.cursor/environment.json` runs `npm ci` at build time and `scripts/cloud-start.sh` on boot, which keeps the dev server up in the `swingbus-dev` tmux session (log: `/tmp/swingbus-dev.log`). Add `DRIVER_PASSWORD`, `ADMIN_PASSWORD`, `AUTH_SECRET` as Cloud Agent secrets.
 
-Phones off the corporate network: run on a stable internal host and expose it with Tailscale Funnel (`scripts/expose-funnel.sh`, `DEPLOY.md`). Ephemeral sandboxes and free quick-tunnels were unreliable.
+Phones reach swingbus over a public HTTPS hostname (driver GPS needs HTTPS). Tailscale Funnel and ad-hoc tunnels aren't allowed: `DEPLOY.md` has the host-agnostic rules, and the xAI hosting plan is kept outside this public repo.
 
 ## Open items
 
-- Real lat/lng for every stop (product owner offered to provide them).
-- Use the onsite/offsite tags: only offer offsite stops in service windows; tag shuttles as onsite vs offsite.
-- Durable hosting (internal host + Funnel, or a managed host). `data/store.json` needs a persistent volume wherever it runs.
-- Auth is shared passwords only (no per-person accounts or audit trail); default passwords live in source, so set env overrides in production.
+- Real lat/lng for Food Trucks / War Room, Crossroads, Church Parking Lot and Spam / Nexus (product owner offered to provide them).
+- Durable hosting: the image is ready (see Running and `DEPLOY.md`); the xAI host, public hostname and secrets are being set up outside this repo. Wherever it runs: one instance and a persistent volume at `/data`.
+- Auth is shared passwords only (no per-person accounts or audit trail). Production refuses to run on the public defaults.
 - GitHub (`jaredcuterispcx-ai/swingbus`): the original build environment had no write credentials, so `main` there may still be just the initial README commit. Branch `cursor/github-main-db12` holds this code merged onto that initial commit (unrelated histories already joined) and can be pushed straight to `main`.
-- Driver GPS flow on the current UI needs one more real-phone check: start a session at a stop, confirm the location chip shows "Here" and pickup auto-selects that stop, then move and confirm it updates.
+- Driver GPS flow on the current UI needs one more real-phone check: start a session at a stop, confirm the location chip shows "Here" and pickup auto-selects that stop, then move and confirm it updates. Also confirm the screen stays on (Screen Wake Lock needs iOS 16.4+), and that locking the phone shows riders "Last seen" after 2 minutes.
 
 ## Gotchas
 
 - Restart the dev server with `pkill -f next-server` (the `dev-forever.sh` loop brings it back); Ctrl-C in its tmux pane kills the loop.
 - Admin lat/lng inputs split a pasted "lat, lng" pair only on paste or blur — never in `onChange`, or typing gets mangled.
+- Scripts that read `parties` from `GET /api/state` need a driver or admin `sb_session` cookie; anonymous calls get the passenger feed. Rate limits live in the server process and reset on restart; give each simulated phone its own `CF-Connecting-IP` so tests don't trip each other's limits.
 - Deleting a stop is refused while riders reference it, and at least 2 stops must remain.
+- `npm start`, `node server.js` and the image are production builds: they exit at boot without `DRIVER_PASSWORD`, `ADMIN_PASSWORD`, `AUTH_SECRET`. Use `npm run dev` locally.
+- Don't keep `data/` out of the standalone build with `outputFileTracingExcludes: { "*": [...] }`: Next applies `*` to its own server trace as a substring match and drops `next/dist/lib/metadata/*`, so the server can't boot. `.dockerignore` already keeps `data/` out of images.
+- Don't bind Next to an IP such as `127.0.0.1` (`HOSTNAME`, `-H`): Next 15 then makes the login redirect an absolute `http://localhost:<port>/login`, even behind proxy headers, which breaks phones behind any proxy or tunnel. Bind to `0.0.0.0` (the repo and image default) or `localhost` (which may listen on `::1` only).

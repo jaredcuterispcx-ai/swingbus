@@ -32,6 +32,13 @@ export const ChevronIcon = ({ size = 18 }: P) => (
   </svg>
 );
 
+export const ClockIcon = ({ size = 18 }: P) => (
+  <svg {...base(size)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+);
+
 export const UsersIcon = ({ size = 18 }: P) => (
   <svg {...base(size)}>
     <circle cx="9" cy="8" r="3.5" />

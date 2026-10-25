@@ -39,11 +39,33 @@ A bus is **full** when `available === 0`, even if some seats are only *held* and
 4. Driver accepts clearance, arrives, **boards** → reserved becomes **occupied**.
 5. At destination, driver **alights** → occupied drops; party **delivered**.
 
+A party can be **cancelled** only while waiting or cleared: by the phone that requested it (its `sb_ride` cancel-token cookie), or by ground control from the Waiting board. Delivered and cancelled parties are deleted 3 hours after they close.
+
+Riders follow along on the stop page, which reads their ride from the feed (`state.ride`): "On Volt" with the ETA to their stop, then "Arrived". For 15 minutes after a ride ends the page says how it ended, until the rider taps Done or Request again.
+
+Requests nobody picks up lapse 30 minutes after they were made (`cancelled` with `cancelReason: "expired"`). A driver at the stop can mark a suggested group as a no-show (`cancelReason: "no_show"`), which frees its seats at once. Either way the rider sees why, with a one-tap "Request again".
+
+A request can't be bigger than the biggest shuttle ground control can send for that trip (the feed's `maxPartySize`, or `maxPartyByService` when only onsite or only offsite shuttles run the trip; 12 when none is online); a waiting party that stops fitting because the big shuttle left is told "Too many riders" until one that fits is back.
+
 ## Vehicle lifecycle
 
 `offline → available → enroute → at_stand / boarding → full → …`
 
 GPS updates keep the vehicle positionable for ETA. Without GPS (and without a current stand), the vehicle is invisible to auto-clearance.
+
+Presence runs off `lastLocationAt`. `/driver` refreshes it about every 30 s while open (a new GPS fix, or the last one again when parked) and holds a Screen Wake Lock so the phone doesn't sleep. When the phone goes quiet:
+
+| Quiet for | Effect |
+| --- | --- |
+| 2 min | Riders and ground control see "Last seen N min ago" |
+| 5 min | Out of contact: no new clearances; riders it held wait again and go to another shuttle |
+| 30 min | Taken offline; anyone still on board counts as dropped off |
+
+Going offline, by the driver (who confirms first if anyone is on board) or by the 30-minute cutoff, drops everyone still on board at their stop. Only the driver's "Go online" brings a shuttle back; GPS alone doesn't.
+
+After a pickup the heading becomes the nearest stop someone on board is going to. When the last rider for the heading stop gets off, it moves to the next nearest, or clears when nobody is left. A heading the driver picked for a stop nobody on board is going to stays put.
+
+The cutoffs live in `src/lib/lifecycle.ts`.
 
 ## Why this mirrors a ground controller
 

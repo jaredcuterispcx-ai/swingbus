@@ -1,4 +1,6 @@
+import { canDispatch, expireRequests, retireSilentShuttles } from "./lifecycle";
 import { seatLedger } from "./seats";
+import { runsTrip } from "./service-hours";
 import type {
   AppState,
   Clearance,
@@ -58,7 +60,7 @@ function destSummary(state: AppState, parties: PassengerParty[]): string {
  * Ground control: issue clearances so each waiting stand gets the nearest
  * vehicle with enough *available* seats (capacity − occupied − reserved).
  */
-export function computeClearances(state: AppState): Clearance[] {
+export function computeClearances(state: AppState, nowMs = Date.now()): Clearance[] {
   const waiting = state.parties.filter((p) => p.status === "waiting");
   const alreadyCleared = state.parties.filter(
     (p) => p.status === "cleared" || p.status === "boarding",
@@ -94,14 +96,14 @@ export function computeClearances(state: AppState): Clearance[] {
 
   type Slot = { vehicle: Vehicle; remaining: number };
   const slots: Slot[] = state.vehicles
-    .filter((v) => v.active)
+    .filter((v) => canDispatch(v, nowMs))
     .map((v) => ({ vehicle: v, remaining: seatLedger(state, v).available }));
 
   // Subtract seats already held by keepExisting clearances from slot remaining
   // (seatLedger already counts reserved from cleared parties).
   const claimed = new Set<string>();
   const fresh: Clearance[] = [];
-  const now = new Date().toISOString();
+  const now = new Date(nowMs).toISOString();
 
   for (const load of stopLoads) {
     const stop = stopById(state.stops, load.stopId);
@@ -132,7 +134,9 @@ export function computeClearances(state: AppState): Clearance[] {
       const pack: PassengerParty[] = [];
       let seats = slot.remaining;
       for (const req of stillUnclaimed) {
-        if (req.partySize <= seats) {
+        const destination = stopById(state.stops, req.destinationId);
+        const serves = !destination || runsTrip(slot.vehicle.service, stop, destination);
+        if (serves && req.partySize <= seats) {
           pack.push(req);
           seats -= req.partySize;
           claimed.add(req.id);
@@ -246,9 +250,9 @@ export function applyClearances(
   };
 }
 
-/** Riders held for a shuttle that went offline wait again so another one can be cleared. */
-function releaseOfflineHolds(state: AppState): AppState {
-  const online = new Set(state.vehicles.filter((v) => v.active).map((v) => v.id));
+/** Riders held for a shuttle that went offline or out of contact wait again so another one can be cleared. */
+function releaseOfflineHolds(state: AppState, now: number): AppState {
+  const online = new Set(state.vehicles.filter((v) => canDispatch(v, now)).map((v) => v.id));
   let released = false;
   const parties = state.parties.map((p) => {
     if (
@@ -270,8 +274,9 @@ function releaseOfflineHolds(state: AppState): AppState {
   return released ? { ...state, parties } : state;
 }
 
-export function refreshGroundControl(state: AppState): AppState {
-  const live = releaseOfflineHolds(state);
-  const clearances = computeClearances(live);
+export function refreshGroundControl(state: AppState, now = Date.now()): AppState {
+  const aged = retireSilentShuttles(expireRequests(state, now), now);
+  const live = releaseOfflineHolds(aged, now);
+  const clearances = computeClearances(live, now);
   return applyClearances({ ...live, clearances }, clearances);
 }
