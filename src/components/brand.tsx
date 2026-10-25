@@ -7,7 +7,8 @@ export function BoltMark({ size = 32 }: { size?: number }) {
       aria-hidden="true"
       className="shrink-0"
     >
-      <rect width="64" height="64" rx="14" fill="#000" />
+      <rect width="64" height="64" rx="14" fill="var(--night)" />
+      <rect x="1" y="1" width="62" height="62" rx="13" fill="none" stroke="var(--night-ring)" strokeWidth="2" />
       <path d="M36.5 7 15 36h14l-3.5 21L49 27.5H34.8L36.5 7Z" fill="var(--volt)" />
     </svg>
   );

@@ -109,7 +109,7 @@ export default function GroundControlPage() {
         />
       </div>
 
-      {loading && <p className="text-sm text-ink-soft/70">Loading board…</p>}
+      {loading && <p className="text-sm text-ink-soft">Loading board…</p>}
       {error && (
         <p className="mb-4 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">
           {error}
@@ -119,7 +119,7 @@ export default function GroundControlPage() {
       <section className="sb-panel sb-rise mb-4">
         <h2 className="sb-brand text-2xl">Fleet</h2>
         {fleet.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-soft/75">
+          <p className="mt-3 text-sm text-ink-soft">
             No shuttles online
           </p>
         ) : (
@@ -127,7 +127,7 @@ export default function GroundControlPage() {
             {fleet.map((v) => (
               <article
                 key={v.id}
-                className="rounded-xl border border-[var(--line)] bg-white/60 px-3 py-3"
+                className="rounded-xl border border-[var(--line)] bg-surface px-3 py-3"
               >
                 <div className="flex items-baseline justify-between gap-2">
                   <h3 className="font-semibold">{v.callsign}</h3>
@@ -137,11 +137,11 @@ export default function GroundControlPage() {
                 </div>
                 <p className="sb-brand mt-1 text-3xl tabular-nums text-ink">
                   {v.seats.available}
-                  <span className="ml-2 text-base font-sans font-medium text-ink-soft/70">
+                  <span className="ml-2 text-base font-sans font-medium text-ink-soft">
                     seats free
                   </span>
                 </p>
-                <p className="mt-1 text-xs text-ink-soft/75">
+                <p className="mt-1 text-xs text-ink-soft">
                   {v.seats.reserved} held · {v.seats.occupied}/{v.seats.capacity}{" "}
                   onboard
                   {v.lat != null
@@ -170,13 +170,13 @@ export default function GroundControlPage() {
           <h2 className="sb-brand text-2xl">Waiting</h2>
           {cancelError && <p className="mt-2 text-sm text-danger">{cancelError}</p>}
           {stands.length === 0 ? (
-            <p className="mt-3 text-sm text-ink-soft/75">No one waiting</p>
+            <p className="mt-3 text-sm text-ink-soft">No one waiting</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {stands.map(({ stop, open, waitingSeats, clearedSeats }) => (
                 <li
                   key={stop.id}
-                  className="rounded-xl border border-[var(--line)] bg-white/55 px-3 py-2"
+                  className="rounded-xl border border-[var(--line)] bg-surface px-3 py-2"
                 >
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="font-semibold">
@@ -186,13 +186,13 @@ export default function GroundControlPage() {
                       {waitingSeats + clearedSeats}
                     </span>
                   </div>
-                  <p className="text-xs text-ink-soft/70">
+                  <p className="text-xs text-ink-soft">
                     {waitingSeats} waiting · {clearedSeats} cleared
                   </p>
                   <ul className="mt-1 space-y-1">
                     {open.map((p) => (
                       <li key={p.id} className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 text-sm break-words text-ink-soft/80">
+                        <span className="min-w-0 text-sm break-words text-ink-soft">
                           {p.partySize} → {stopName(state, p.destinationId)} ({p.status})
                         </span>
                         {(p.status === "waiting" || p.status === "cleared") && (
@@ -216,7 +216,7 @@ export default function GroundControlPage() {
         <section className="sb-panel sb-rise sb-rise-delay-2">
           <h2 className="sb-brand text-2xl">Clearances</h2>
           {clearances.length === 0 ? (
-            <p className="mt-3 text-sm text-ink-soft/75">
+            <p className="mt-3 text-sm text-ink-soft">
               None right now
             </p>
           ) : (
@@ -229,11 +229,11 @@ export default function GroundControlPage() {
                   <p className="font-semibold">
                     {c.vehicleCallsign} → {c.stopName}
                   </p>
-                  <p className="text-xs text-ink-soft/80">
+                  <p className="text-xs text-ink-soft">
                     Hold {c.seatsReserved} seats · ETA ~{c.etaMinutes} min ·{" "}
                     {c.status}
                   </p>
-                  <p className="text-xs text-ink-soft/70">{c.destinationSummary}</p>
+                  <p className="text-xs text-ink-soft">{c.destinationSummary}</p>
                   <p className="mt-1 text-[11px] text-leaf">{c.reason}</p>
                 </li>
               ))}
@@ -245,13 +245,13 @@ export default function GroundControlPage() {
       <section className="sb-panel sb-rise sb-rise-delay-3 mt-4">
         <h2 className="sb-brand text-2xl">Recent</h2>
         {(state?.events.length ?? 0) === 0 ? (
-          <p className="mt-3 text-sm text-ink-soft/75">Nothing yet</p>
+          <p className="mt-3 text-sm text-ink-soft">Nothing yet</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {state!.events.slice(0, 10).map((e) => {
               const v = state!.vehicles.find((x) => x.id === e.vehicleId);
               return (
-                <li key={e.id} className="text-sm text-ink-soft/90">
+                <li key={e.id} className="text-sm text-ink-soft">
                   <span className="font-medium text-ink">
                     {v?.callsign ?? "Vehicle"}
                   </span>{" "}
@@ -264,7 +264,7 @@ export default function GroundControlPage() {
                       → {stopName(state, e.destinationId)}
                     </>
                   ) : null}{" "}
-                  <span className="text-xs opacity-60">
+                  <span className="text-xs">
                     {new Date(e.createdAt).toLocaleTimeString()}
                   </span>
                 </li>

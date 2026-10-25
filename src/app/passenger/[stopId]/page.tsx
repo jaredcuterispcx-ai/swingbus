@@ -212,7 +212,7 @@ export default function PassengerStopPage() {
           height={220}
         />
 
-        <section className="sb-rise -mt-4 relative rounded-2xl bg-white px-1 pt-5">
+        <section className="sb-rise -mt-4 relative rounded-2xl bg-background px-1 pt-5">
           <p className="sb-brand truncate text-3xl">On {shuttle?.callsign ?? "board"}</p>
           <p className="mt-0.5 truncate text-ink-soft">
             {there ? `At ${to}` : eta != null ? `To ${to} · ${eta} min` : `To ${to}`}
@@ -237,7 +237,7 @@ export default function PassengerStopPage() {
           height={220}
         />
 
-        <section className="sb-rise -mt-4 relative rounded-2xl bg-white px-1 pt-5">
+        <section className="sb-rise -mt-4 relative rounded-2xl bg-background px-1 pt-5">
           {tooBig ? (
             <div>
               <p className="sb-brand text-3xl">Too many riders</p>
@@ -282,9 +282,11 @@ export default function PassengerStopPage() {
                 {fleet.map((row) => (
                   <li
                     key={row.vehicle.id}
-                    className={`sb-row cursor-default ${row.vehicle.presence === "lost" ? "opacity-50" : ""}`}
+                    className={`sb-row cursor-default ${row.vehicle.presence === "lost" ? "text-ink-soft" : ""}`}
                   >
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-black">
+                    <span
+                      className={`sb-night flex size-10 shrink-0 items-center justify-center rounded-full ${row.vehicle.presence === "lost" ? "opacity-50" : ""}`}
+                    >
                       <BoltGlyph size={16} />
                     </span>
                     <span className="min-w-0 flex-1">

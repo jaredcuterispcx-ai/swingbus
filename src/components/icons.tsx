@@ -1,6 +1,6 @@
-type P = { size?: number };
+type P = { size?: number; className?: string };
 
-const base = (size: number) => ({
+const base = (size: number, className?: string) => ({
   width: size,
   height: size,
   viewBox: "0 0 24 24",
@@ -10,6 +10,7 @@ const base = (size: number) => ({
   strokeLinecap: "round" as const,
   strokeLinejoin: "round" as const,
   "aria-hidden": true,
+  className,
 });
 
 export const PinIcon = ({ size = 18 }: P) => (
@@ -46,11 +47,24 @@ export const UsersIcon = ({ size = 18 }: P) => (
   </svg>
 );
 
+export const SunIcon = ({ size = 18, className }: P) => (
+  <svg {...base(size, className)}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
+  </svg>
+);
+
+export const MoonIcon = ({ size = 18, className }: P) => (
+  <svg {...base(size, className)}>
+    <path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a6.5 6.5 0 0 0 11 11Z" />
+  </svg>
+);
+
 /** Pickup dot / destination square used on trip cards. */
 export const TripDots = () => (
   <span className="flex flex-col items-center gap-1 pt-2" aria-hidden="true">
-    <span className="size-2.5 rounded-full bg-black" />
-    <span className="h-7 w-0.5 bg-black/80" />
-    <span className="size-2.5 bg-black" />
+    <span className="size-2.5 rounded-full bg-ink" />
+    <span className="h-7 w-0.5 bg-ink/80" />
+    <span className="size-2.5 bg-ink" />
   </span>
 );

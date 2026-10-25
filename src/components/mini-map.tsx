@@ -80,14 +80,14 @@ export function MiniMap({
     <svg
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="xMidYMid slice"
-      className="block w-full rounded-xl bg-[#eef0f1]"
+      className="block w-full rounded-xl bg-[var(--map-bg)]"
       style={{ height }}
       role="img"
       aria-label="Shuttle map"
     >
       <defs>
         <pattern id="sb-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-          <path d="M40 0H0V40" fill="none" stroke="#e1e4e6" strokeWidth="1" />
+          <path d="M40 0H0V40" fill="none" stroke="var(--map-grid)" strokeWidth="1" />
         </pattern>
       </defs>
       <rect width={W} height={H} fill="url(#sb-grid)" />
@@ -96,27 +96,31 @@ export function MiniMap({
         const a = view(pickup.lat, pickup.lng);
         const b = view(dest.lat, dest.lng);
         return (
-          <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#000" strokeWidth="3" strokeLinecap="round" />
+          <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--ink)" strokeWidth="3" strokeLinecap="round" />
         );
       })()}
 
       {stops.map((s) => {
         if (s.id === pickupId || s.id === destinationId) return null;
         const p = view(s.lat, s.lng);
-        return <circle key={s.id} cx={p.x} cy={p.y} r="4" fill="#9a9a9a" stroke="#fff" strokeWidth="1.5" />;
+        return (
+          <circle key={s.id} cx={p.x} cy={p.y} r="4" fill="var(--map-stop)" stroke="var(--map-halo)" strokeWidth="1.5" />
+        );
       })}
 
       {dest && (() => {
         const p = view(dest.lat, dest.lng);
-        return <rect x={p.x - 7} y={p.y - 7} width="14" height="14" fill="#000" stroke="#fff" strokeWidth="2" />;
+        return (
+          <rect x={p.x - 7} y={p.y - 7} width="14" height="14" fill="var(--ink)" stroke="var(--map-halo)" strokeWidth="2" />
+        );
       })()}
 
       {pickup && (() => {
         const p = view(pickup.lat, pickup.lng);
         return (
           <g>
-            <circle cx={p.x} cy={p.y} r="9" fill="#000" />
-            <circle cx={p.x} cy={p.y} r="3.5" fill="#fff" />
+            <circle cx={p.x} cy={p.y} r="9" fill="var(--ink)" />
+            <circle cx={p.x} cy={p.y} r="3.5" fill="var(--map-halo)" />
           </g>
         );
       })()}
@@ -125,9 +129,10 @@ export function MiniMap({
         if (v.lat == null || v.lng == null) return null;
         const p = view(v.lat, v.lng);
         const r = v.highlight ? 13 : 11;
+        // Faded still keeps 3:1 against the map (WCAG non-text contrast).
         return (
-          <g key={v.id} transform={`translate(${p.x} ${p.y})`} opacity={v.faded ? 0.35 : 1}>
-            <circle r={r} fill="#000" stroke={v.highlight ? "var(--volt)" : "#fff"} strokeWidth="2.5" />
+          <g key={v.id} transform={`translate(${p.x} ${p.y})`} opacity={v.faded ? 0.5 : 1}>
+            <circle r={r} fill="var(--night)" stroke={v.highlight ? "var(--volt)" : "var(--on-night)"} strokeWidth="2.5" />
             <path
               d="M1.2 -7.5 -4.6 0.8h3.9l-1 6.7 6.3-8.4H0.7l0.5-7.6Z"
               fill="var(--volt)"

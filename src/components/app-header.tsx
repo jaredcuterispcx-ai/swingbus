@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { BoltMark } from "./brand";
+import { ThemeToggle } from "./theme-toggle";
 
 export function AppHeader({
   backHref = "/",
@@ -20,6 +21,7 @@ export function AppHeader({
       </Link>
       {title && <h1 className="sb-brand min-w-0 flex-1 truncate text-xl">{title}</h1>}
       <div className="ml-auto flex items-center gap-2">
+        <ThemeToggle />
         {right ?? (
           <Link href="/" aria-label="swingbus home">
             <BoltMark size={30} />
