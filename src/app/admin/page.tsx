@@ -37,10 +37,22 @@ function toDraft(stop?: Stop): Draft {
   };
 }
 
-/** Accepts "35.0012, -90.0145" pasted into either coordinate field. */
+/** With a hemisphere letter, the letter alone sets the sign (S and W are negative). */
+function signed(value: string, hemisphere: string | undefined, negative: "S" | "W"): string {
+  if (!hemisphere) return value;
+  const abs = value.replace(/^-/, "");
+  return hemisphere.toUpperCase() === negative ? `-${abs}` : abs;
+}
+
+/**
+ * Accepts "35.0012, -90.0145" or Apple Maps' "35.0012° N, 90.0145° W"
+ * pasted into either coordinate field.
+ */
 function splitPair(value: string): [string, string] | null {
-  const m = value.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
-  return m ? [m[1], m[2]] : null;
+  const m = value.match(
+    /^\s*(-?\d+(?:\.\d+)?)\s*°?\s*([NS])?\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*°?\s*([EW])?\s*$/i,
+  );
+  return m ? [signed(m[1], m[2], "S"), signed(m[3], m[4], "W")] : null;
 }
 
 export default function AdminPage() {
@@ -282,14 +294,17 @@ function StopEditor({
     e.preventDefault();
     setBusy(true);
     setError(null);
+    // Enter submits without blurring, so a typed pair may not have been split yet.
+    const pair = splitPair(draft.lat) ?? splitPair(draft.lng);
+    if (pair) set({ lat: pair[0], lng: pair[1] });
     try {
       const body = {
         name: draft.name,
         shortCode: draft.shortCode,
         description: draft.description,
         service: draft.service || null,
-        lat: draft.lat,
-        lng: draft.lng,
+        lat: pair ? pair[0] : draft.lat,
+        lng: pair ? pair[1] : draft.lng,
         arrivalRadiusM: draft.arrivalRadiusM || null,
       };
       if (stop) await send("PATCH", { id: stop.id, ...body });
@@ -401,13 +416,13 @@ function StopEditor({
             {accuracy > 50 ? " — step outside or wait a moment and try again" : ""}
           </p>
         )}
+        {/* No inputMode="decimal": the iOS decimal keypad has no minus key or comma. */}
         <div className="grid grid-cols-2 gap-3">
           <label className="block space-y-1.5">
             <span className="text-[11px] text-ink-soft">Latitude</span>
             <input
               className="sb-input font-mono"
               required
-              inputMode="decimal"
               value={draft.lat}
               {...coordHandlers("lat")}
               placeholder="35.0012"
@@ -418,7 +433,6 @@ function StopEditor({
             <input
               className="sb-input font-mono"
               required
-              inputMode="decimal"
               value={draft.lng}
               {...coordHandlers("lng")}
               placeholder="-90.0145"

@@ -44,7 +44,8 @@ export default function PassengerStopPage() {
     () => (state && stopId ? shuttlesForStop(state, stopId) : []),
     [state, stopId],
   );
-  const next = fleet[0] ?? null;
+  const mine = waiting ? fleet.find((row) => row.vehicle.id === myParty?.vehicleId) : undefined;
+  const next = mine ?? fleet[0] ?? null;
 
   async function submit() {
     setSubmitting(true);
@@ -60,6 +61,7 @@ export default function PassengerStopPage() {
       localStorage.setItem(PARTY_KEY, data.id);
       setPartyId(data.id);
       await refresh();
+      setDestinationId("");
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Failed");
     } finally {
