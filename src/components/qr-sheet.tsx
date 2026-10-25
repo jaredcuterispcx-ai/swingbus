@@ -167,7 +167,8 @@ function QrCard({
   path,
 }: Omit<QrCardData, "key"> & { base: string | null }) {
   return (
-    <article className="sb-qr-card">
+    // Light on dark pages too: it previews the paper, and scanners want dark modules on white.
+    <article className="sb-qr-card sb-light">
       <div className="sb-qr-top">
         <span className="inline-flex items-center gap-1.5">
           <BoltMark size={22} />

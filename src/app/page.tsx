@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { BoltGlyph, Wordmark } from "@/components/brand";
 import { ChevronIcon, PinIcon, SearchIcon } from "@/components/icons";
 import { MiniMap } from "@/components/mini-map";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { nextShuttleForStop } from "@/lib/fleet";
 import { opensLabel, statusOf } from "@/lib/service-hours";
 import { useAppState } from "@/lib/use-app-state";
@@ -29,9 +30,12 @@ export default function HomePage() {
     <main className="sb-shell">
       <header className="mb-4 flex min-h-12 items-center justify-between">
         <Wordmark size={30} />
-        <Link href="/driver" className="sb-pill">
-          Drive
-        </Link>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <Link href="/driver" className="sb-pill">
+            Drive
+          </Link>
+        </div>
       </header>
 
       <div className="relative mb-5">

@@ -19,7 +19,7 @@ export default function DeployPage() {
           on that address, or set{" "}
           <span className="font-mono text-xs text-ink">PUBLIC_URL</span>.
         </p>
-        <p className="text-xs text-ink-soft/60">Hosting notes: DEPLOY.md in the repo.</p>
+        <p className="text-xs text-ink-soft">Hosting notes: DEPLOY.md in the repo.</p>
       </section>
     </main>
   );

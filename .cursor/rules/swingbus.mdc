@@ -15,9 +15,12 @@ Read `AGENTS.md` for full context (flows, architecture, stops, open items). Thes
 - Minimize text. No explanatory paragraphs on selection screens; prefer short labels, icons, and one clear action.
 
 ## Visual design (Uber-like)
-- White background, black text, black primary buttons, gray (`--mist`, #EEE) inputs, list rows with hairline dividers.
-- One accent: electric yellow `--volt` (#FFD400). Use it as a fill (bolt logo, live dot, "at stop" chip, highlights on black). Never yellow text on white.
-- Logo is the yellow lightning bolt on a black rounded square (`src/components/brand.tsx`, `public/bolt.svg`).
+- Dark by default on every device, whatever the system setting: black background, white text, white primary buttons, gray (`--mist`, #262626) inputs, list rows with hairline dividers. Light is the same inverted (white background, black text and buttons, #EEE inputs).
+- The sun/moon switch (`ThemeToggle`) stays in every page header (`AppHeader`, plus the home header); each device remembers its pick (`localStorage` `swingbus.theme`). The inline `<head>` script in `src/app/layout.tsx` (`THEME_BOOT_SCRIPT`, `src/lib/theme.ts`) applies it before first paint: never move it into an effect, and don't add `themeColor` to the Next viewport (the script owns the `theme-color` meta).
+- Colors come only from the tokens in `globals.css` (`bg-foam`, `text-ink-soft`, `bg-strong`/`text-on-strong`, `bg-raised`, `sb-night`, `text-on-volt`…), never `bg-white`, `bg-black` or hex. Every pair meets WCAG AA in both schemes; `npm test` checks them (`src/lib/theme.test.ts`), so add new pairs there.
+- One accent: electric yellow `--volt` (#FFD400). Use it as a fill (bolt logo, live dot, "at stop" chip, highlights on black), with black text on it. Never yellow text on white.
+- Logo is the yellow lightning bolt on a black rounded square (`src/components/brand.tsx`, `public/bolt.svg`); on dark pages it and the shuttle chips get a hairline ring.
+- Paper is always light: the dark palette is screen-only, and QR cards are `sb-light` so they print and preview dark modules on white.
 - Mobile first: inputs stay 16px, tap targets ≥ 44px, prefer tappable lists over dropdowns for destinations.
 - Reuse the `sb-*` classes and components (`AppHeader`, `MiniMap`, icons) instead of new one-off styles.
 

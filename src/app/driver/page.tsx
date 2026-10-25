@@ -555,7 +555,7 @@ export default function DriverPage() {
             <button
               type="submit"
               disabled={busy || !callsign.trim()}
-              className="mt-10 flex size-32 items-center justify-center rounded-full bg-black text-3xl font-extrabold tracking-tight text-white shadow-[0_0_0_10px_var(--volt)] transition active:scale-95 disabled:opacity-40"
+              className="mt-10 flex size-32 items-center justify-center rounded-full bg-night text-3xl font-extrabold tracking-tight text-on-night shadow-[0_0_0_10px_var(--volt)] transition active:scale-95 disabled:opacity-40"
             >
               {busy ? "…" : "GO"}
             </button>
@@ -585,12 +585,12 @@ export default function DriverPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="sb-rise rounded-xl bg-black px-4 py-3.5 text-white">
+          <div className="sb-rise sb-night rounded-xl px-4 py-3.5">
             <div className="flex items-center justify-between">
               <span className="flex min-w-0 items-center gap-2.5 font-semibold">
                 <span className="sb-live-dot shrink-0" />
                 <span className="truncate">{vehicle.callsign}</span>
-                <span className="shrink-0 text-sm font-medium text-white/70">
+                <span className="shrink-0 text-sm font-medium text-on-night/70">
                   {serviceLabel(vehicle.service)}
                 </span>
               </span>
@@ -599,7 +599,7 @@ export default function DriverPage() {
                 {vehicle.seats.occupied}/{vehicle.seats.capacity}
               </span>
             </div>
-            <p className="mt-1 pl-5 text-xs text-white/60">Keep this screen open</p>
+            <p className="mt-1 pl-5 text-xs text-on-night/60">Keep this screen open</p>
           </div>
 
           {confirmOffline && onboardPax > 0 && (
@@ -615,7 +615,7 @@ export default function DriverPage() {
               </button>
               <button
                 type="button"
-                className="sb-btn sb-btn-ghost w-full bg-white"
+                className="sb-btn sb-btn-ghost w-full bg-raised"
                 onClick={() => setConfirmOffline(false)}
               >
                 Keep driving
@@ -630,7 +630,7 @@ export default function DriverPage() {
           ) : pos && (atStop || nearest) ? (
             <div
               className={`flex items-center gap-3 rounded-xl p-3.5 ${
-                atStop ? "bg-volt" : "bg-foam"
+                atStop ? "bg-volt text-on-volt" : "bg-foam"
               }`}
             >
               <PinIcon />
@@ -709,7 +709,7 @@ export default function DriverPage() {
                       disabled={added}
                       onClick={() => addSuggested(s)}
                     >
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-volt font-bold tabular-nums">
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-volt font-bold text-on-volt tabular-nums">
                         {s.pax}
                       </span>
                       <span className="min-w-0 flex-1 truncate font-semibold">
@@ -738,7 +738,7 @@ export default function DriverPage() {
               <div className="flex items-center gap-2">
                 <Stepper value={pax} min={1} max={Math.max(1, room || 40)} onChange={setPax} onGray />
                 <select
-                  className="sb-select min-w-0 flex-1 bg-white font-semibold"
+                  className="sb-select min-w-0 flex-1 bg-raised font-semibold"
                   value={destId}
                   onChange={(e) => setDestId(e.target.value)}
                   aria-label="Their destination"
@@ -753,7 +753,7 @@ export default function DriverPage() {
               </div>
               <button
                 type="button"
-                className="sb-btn sb-btn-ghost w-full bg-white"
+                className="sb-btn sb-btn-ghost w-full bg-raised"
                 disabled={!destId || busy}
                 onClick={addGroup}
               >
@@ -767,7 +767,7 @@ export default function DriverPage() {
               <ul>
                 {groups.map((g) => (
                   <li key={g.id} className="sb-row cursor-default">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-black font-bold text-white tabular-nums">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-strong font-bold text-on-strong tabular-nums">
                       {g.pax}
                     </span>
                     <span className="min-w-0 flex-1 truncate font-semibold">
@@ -803,7 +803,7 @@ export default function DriverPage() {
               <ul>
                 {onboard.map((g) => (
                   <li key={g.destinationId} className="sb-row cursor-default">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-black font-bold text-white tabular-nums">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-strong font-bold text-on-strong tabular-nums">
                       {g.pax}
                     </span>
                     <span className="min-w-0 flex-1 truncate font-semibold">
@@ -828,7 +828,7 @@ export default function DriverPage() {
       {status && (
         <p
           role="status"
-          className="sb-rise mt-4 rounded-xl bg-black px-4 py-3 text-sm font-medium text-white"
+          className="sb-rise mt-4 rounded-xl bg-strong px-4 py-3 text-sm font-medium text-on-strong"
         >
           {status}
         </p>
@@ -850,7 +850,7 @@ function Stepper({
   onChange: (n: number) => void;
   onGray?: boolean;
 }) {
-  const btn = `sb-icon-btn text-xl font-semibold ${onGray ? "bg-white" : ""}`;
+  const btn = `sb-icon-btn text-xl font-semibold ${onGray ? "bg-raised" : ""}`;
   return (
     <div className="flex shrink-0 items-center gap-1">
       <button

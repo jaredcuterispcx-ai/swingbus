@@ -1,26 +1,88 @@
 @import "tailwindcss";
 
-/* Black / white / one electric accent. */
 :root {
+  --sb-font-sans: "Inter Variable", system-ui, -apple-system, sans-serif;
+  --sb-font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+}
+
+/*
+ * Black / white / one electric accent, in two schemes. Light is the base so
+ * paper always prints light; on screen dark is the default and
+ * <html data-theme="light"> opts out (set before first paint, src/lib/theme.ts).
+ * .sb-light keeps a subtree light on a dark page. Every pair here meets WCAG AA
+ * in both schemes (src/lib/theme.test.ts); use these, not white/black/hex.
+ */
+:root,
+.sb-light {
+  color-scheme: light;
   --void: #ffffff;
+  --void-clear: rgb(255 255 255 / 0);
   --ink: #000000;
   --ink-soft: #5e5e5e;
   --foam: #f6f6f6;
   --mist: #eeeeee;
+  --mist-hover: #e2e2e2;
+  /* Controls and cards that sit on foam. */
+  --raised: #ffffff;
   /* "leaf" is the emphasis color for text/borders: black on white. */
   --leaf: #000000;
   --leaf-bright: #222222;
+  /* Inverse fills: primary buttons, selected segments, toasts. */
+  --strong: #000000;
+  --strong-hover: #222222;
+  --on-strong: #ffffff;
+  /* Brand black behind the yellow bolt (logo, shuttle chips, live bar), ringed on dark pages. */
+  --night: #000000;
+  --on-night: #ffffff;
+  --night-ring: transparent;
   --volt: #ffd400;
+  --on-volt: #000000;
   --amber: #a15c00;
   --amber-soft: #fff4d6;
-  --danger: #e11900;
+  --danger: #c81600;
   --line: #e8e8e8;
   --surface: #ffffff;
   --surface-2: #eeeeee;
+  --placeholder: #6b6b6b;
+  --map-bg: #eef0f1;
+  --map-grid: #e1e4e6;
+  --map-stop: #767676;
+  --map-halo: #ffffff;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --background: var(--void);
   --foreground: var(--ink);
-  --sb-font-sans: "Inter Variable", system-ui, -apple-system, sans-serif;
-  --sb-font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+}
+
+@media screen {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --void: #000000;
+    --void-clear: rgb(0 0 0 / 0);
+    --ink: #ffffff;
+    --ink-soft: #a8a8a8;
+    --foam: #141414;
+    --mist: #262626;
+    --mist-hover: #333333;
+    --raised: #262626;
+    --leaf: #ffffff;
+    --leaf-bright: #dddddd;
+    --strong: #ffffff;
+    --strong-hover: #e2e2e2;
+    --on-strong: #000000;
+    --night-ring: rgb(255 255 255 / 0.2);
+    --amber: #ffbf47;
+    --amber-soft: #2b1f00;
+    --danger: #ff6b5c;
+    --line: #2e2e2e;
+    --surface: #0f0f0f;
+    --surface-2: #262626;
+    --placeholder: #949494;
+    --map-bg: #17191c;
+    --map-grid: #24272b;
+    --map-stop: #8c8c8c;
+    --map-halo: #000000;
+    --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
 }
 
 @theme inline {
@@ -30,9 +92,15 @@
   --color-ink-soft: var(--ink-soft);
   --color-foam: var(--foam);
   --color-mist: var(--mist);
+  --color-raised: var(--raised);
   --color-leaf: var(--leaf);
   --color-leaf-bright: var(--leaf-bright);
+  --color-strong: var(--strong);
+  --color-on-strong: var(--on-strong);
+  --color-night: var(--night);
+  --color-on-night: var(--on-night);
   --color-volt: var(--volt);
+  --color-on-volt: var(--on-volt);
   --color-amber: var(--amber);
   --color-amber-soft: var(--amber-soft);
   --color-danger: var(--danger);
@@ -132,13 +200,13 @@ select {
 
 .sb-btn-primary,
 .sb-btn-accent {
-  background: #000;
-  color: #fff;
+  background: var(--strong);
+  color: var(--on-strong);
 }
 
 .sb-btn-primary:hover:not(:disabled),
 .sb-btn-accent:hover:not(:disabled) {
-  background: #222;
+  background: var(--strong-hover);
 }
 
 .sb-btn-ghost {
@@ -147,7 +215,7 @@ select {
 }
 
 .sb-btn-ghost:hover:not(:disabled) {
-  background: #e2e2e2;
+  background: var(--mist-hover);
 }
 
 .sb-btn-lg {
@@ -164,6 +232,7 @@ select {
   border-radius: 999px;
   background: var(--mist);
   flex-shrink: 0;
+  cursor: pointer;
 }
 
 .sb-input,
@@ -180,14 +249,14 @@ select {
 }
 
 .sb-input::placeholder {
-  color: #8a8a8a;
+  color: var(--placeholder);
 }
 
 .sb-input:focus,
 .sb-select:focus {
   outline: none;
-  border-color: #000;
-  background: #fff;
+  border-color: var(--ink);
+  background-color: var(--void);
 }
 
 .sb-select {
@@ -195,7 +264,7 @@ select {
   -webkit-appearance: none;
   padding-right: 2.6rem;
   text-overflow: ellipsis;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: var(--chevron);
   background-repeat: no-repeat;
   background-position: right 0.9rem center;
 }
@@ -223,8 +292,8 @@ select {
 }
 
 .sb-seg-on {
-  background: #000;
-  color: #fff;
+  background: var(--strong);
+  color: var(--on-strong);
 }
 
 /* Uber-style list row: icon, label, trailing meta, hairline divider */
@@ -295,14 +364,23 @@ select {
   background: var(--mist);
 }
 
+/* Brand black, so the yellow bolt and live dot always sit on black. */
+.sb-night,
 .sb-pill-dark {
-  background: #000;
-  color: #fff;
+  background: var(--night);
+  color: var(--on-night);
+  box-shadow: inset 0 0 0 1px var(--night-ring);
+}
+
+/* Shown only in one scheme, e.g. the theme switch's sun and moon. */
+:root[data-theme="light"] .sb-dark-only,
+:root:not([data-theme="light"]) .sb-light-only {
+  display: none;
 }
 
 .sb-sheet {
   border-radius: 1rem 1rem 0 0;
-  background: #fff;
+  background: var(--void);
   box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.08);
 }
 
@@ -310,7 +388,7 @@ select {
   position: sticky;
   bottom: 0;
   padding: 0.75rem 0 calc(0.75rem + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, #fff 75%, rgba(255, 255, 255, 0));
+  background: linear-gradient(to top, var(--void) 75%, var(--void-clear));
 }
 
 @keyframes sb-rise {
@@ -399,6 +477,7 @@ select {
   border-radius: 0.75rem;
   padding: 1rem 1rem 1.25rem;
   text-align: center;
+  color: var(--ink);
   background: var(--surface);
 }
 
